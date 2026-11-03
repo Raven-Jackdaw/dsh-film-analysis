@@ -3025,8 +3025,22 @@ window.__ModuleLoader__.load({
           flash('error', errorText(error));
         }
       };
-      const body = h(
-        'div',
+      const runTranscribe = async () => {
+        const video = store.getSnapshot().video;
+        if (!video || !video.path) {
+          flash('warn', T('ctx.needVideo'));
+          return;
+        }
+        await runTask('transcribe', async () => {
+          flash('info', T('ctx.transcribing'));
+          const data = await invoke('transcribe', { videoPath: video.path });
+          const segments = Array.isArray(data.segments) ? data.segments : [];
+          store.set((previous) => ({ ...previous, subtitles: segments }));
+          const seconds = data.timings && data.timings.totalMs ? Math.round(data.timings.totalMs / 1000) : null;
+          flash('success', `${T('ctx.transcribed')}：${asNumberOrDash(data.count)}${seconds !== null ? `（${seconds}s）` : ''}`);
+        });
+      };
+      const body = h(        'div',
         { className: 'fa-stack' },
         h('div', { className: 'fa-hint' }, t('ctx.hint')),
         h(
@@ -3038,6 +3052,13 @@ window.__ModuleLoader__.load({
             onClick: () => {
               if (fileRef.current) fileRef.current.click();
             },
+          }),
+          h(FaButton, {
+            label: state.busy.transcribe ? t('ctx.transcribing') : t('ctx.transcribe'),
+            small: true,
+            busy: Boolean(state.busy.transcribe),
+            disabled: Boolean(state.busy.transcribe) || !(state.video && state.video.path),
+            onClick: () => void runTranscribe(),
           }),
           subtitles.length > 0
             ? h(FaButton, {
@@ -4584,6 +4605,10 @@ window.__ModuleLoader__.load({
       'ctx.storyPlaceholder': '这段戏前后发生了什么？人物处境如何？（可选）',
       'ctx.characters': '人物关系',
       'ctx.charactersPlaceholder': '例如：A 是 B 的上司，两人正在争夺……（可选）',
+      'ctx.transcribe': '本地 Whisper 转写',
+      'ctx.transcribing': '正在本地转写（长音频较慢）…',
+      'ctx.transcribed': '转写完成',
+      'ctx.needVideo': '请先导入视频再转写。',
       'shots.threshold': '检测灵敏度',
       'shots.thresholdHint': '数值越低越容易检出切点（0.10–0.60，默认 0.32）。',
       'shots.detail': '分析详细度',
@@ -4913,6 +4938,10 @@ window.__ModuleLoader__.load({
       'ctx.storyPlaceholder': 'What happens before/after this scene? (optional)',
       'ctx.characters': 'Character relations',
       'ctx.charactersPlaceholder': 'e.g. A is B’s boss; they are fighting over… (optional)',
+      'ctx.transcribe': 'Local Whisper transcription',
+      'ctx.transcribing': 'Transcribing locally (long audio is slow)…',
+      'ctx.transcribed': 'Transcription finished',
+      'ctx.needVideo': 'Import a video before transcribing.',
       'shots.threshold': 'Detection sensitivity',
       'shots.thresholdHint': 'Lower values detect more cut points (0.10–0.60, default 0.32).',
       'shots.detail': 'Analysis detail',

@@ -38,7 +38,7 @@
 
 本插件已发布到 npm：**dsh-film-analysis**（https://www.npmjs.com/package/dsh-film-analysis）
 
-> ⚠️ 注意：npm 版本可能滞后于本仓库。当前 npm 最新为 **0.1.0**；需要 v0.2.0 新功能（扩充知识库 / Markdown 渲染等）请用下面的 Release 离线包，或等 npm 更新。
+> ⚠️ 注意：npm 版本可能滞后于本仓库。当前 npm 最新为 **0.1.0**；需要 v0.3.0 新功能（Whisper 转写 / RapidOCR / 字幕导入等）请用下面的 Release 离线包，或等 npm 更新。
 
 在 DSH 的 cordis 预设会话中对 AI 说：
 
@@ -48,7 +48,7 @@
 
 ### 方式 A：下载 Release 里的离线包（推荐，Windows x64）
 
-1. 到 [Releases](../../releases) 下载 `dsh-film-analysis-win-x64-v0.2.0.zip`，解压到固定目录（装好后不要移动）：
+1. 到 [Releases](../../releases) 下载 `dsh-film-analysis-win-x64-v0.3.0.zip`，解压到固定目录（装好后不要移动）：
    ```
    C:\Users\<你>\dsh-plugins\dsh-film-analysis
    ```
@@ -73,6 +73,25 @@ cd dsh-film-analysis
 npm install --ignore-scripts            # 安装工具链依赖，约 200MB
 # 然后在 DSH cordis 会话中让 AI 安装当前目录绝对路径
 ```
+
+### 可选：开启 Python 增强（RapidOCR / Whisper 转写）
+
+插件检测到本机 Python 时会自动启用增强；**不装也完全可用**（OCR 回退 tesseract、无转写按钮）。
+
+1. 安装 Python 3.10+，然后安装依赖：
+   ```bash
+   pip install faster-whisper rapidocr_onnxruntime huggingface_hub
+   ```
+2. 下载一个 faster-whisper 模型到本地目录：
+   ```bash
+   huggingface-cli download Systran/faster-whisper-small --local-dir C:\models\faster-whisper-small
+   ```
+3. 在插件配置里填写（不填则自动在 PATH 里找 python）：
+   - `pythonPath`：python.exe 绝对路径
+   - `whisperModelPath`：上面下载的模型目录
+4. 重载插件：面板出现「本地 Whisper 转写」按钮；OCR 自动优先 RapidOCR。
+
+> 网络受限时可用 HF 镜像（`HF_ENDPOINT=https://hf-mirror.com`）；只想要中文 OCR 更准的话，单独配 `pythonPath` 也能启用 RapidOCR。
 
 ## 兼容性
 
@@ -103,5 +122,8 @@ docs/                 # README 图片与知识数据说明
 - 本仓库不包含任何影片/剧照素材；README 演示图为程序生成的合成画面。
 
 ## English
+
+**Optional Python enhancements:** if a local Python 3.10+ is available, the plugin uses RapidOCR (PP-OCRv4) for better Chinese OCR and can transcribe video audio with faster-whisper. Install `pip install faster-whisper rapidocr_onnxruntime huggingface_hub`, then set `pythonPath` / `whisperModelPath` in the plugin config. Everything still works without Python (tesseract fallback).
+
 
 A DeepSeek Harness Web UI plugin for film / audiovisual-language analysis: measure frame metrics, fill an 8-dimension analysis form, annotate frames, generate structured prompts for the conversation agent, and export Markdown reports and shot-list CSV. It also detects shots and produces one-click shot analysis and full-video shot-by-shot reports inside the panel (clip-level motion / brightness / audio + multiple frames, with token/cost display). ffmpeg/ffprobe/Chinese OCR are installed as npm dependencies. Install the plugin bundle via `plugin_manager` in a Cordis-preset session, then refresh the Web UI. Requires DSH `>=0.2.1-rc.2 <0.3.0`; Windows x64 tested. The bundle includes a knowledge summary distilled from the author's study notes (terms, two-book frameworks, question bank, film index); original textbook text and the full notes are not distributed. The plugin is also published to npm as dsh-film-analysis (install it with plugin_manager target dsh-film-analysis; the first install asks to approve a harmless postinstall script from tesseract.js). Code is MIT-licensed; runtime dependencies keep their own licenses. The panel UI is bilingual (Chinese/English); AI-generated analysis, the built-in terminology library and generated prompts are in Simplified Chinese.
