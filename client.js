@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 影视画面分析器 · Client 端（DSH Web UI 插件，单文件纯 JS）
  *
  * 结构（自上而下）：
@@ -369,6 +369,9 @@ window.__ModuleLoader__.load({
         knowledge: emptyKnowledgeState(),
         aiResults: {},
         videoReport: null,
+        deepJobId: '',
+        deepJob: null,
+        deepTier: 'standard',
         subtitles: [],
         context: { title: '', genre: '', story: '', characters: '', note: '' },
       };
@@ -567,6 +570,8 @@ window.__ModuleLoader__.load({
       state.ocr = sanitizeOcr(raw.ocr);
       state.subtitles = sanitizeSubtitles(raw.subtitles);
       state.context = sanitizeContext(raw.context);
+      state.deepJobId = asString(raw.deepJobId);
+      state.deepTier = ['fast', 'standard', 'precise'].includes(raw.deepTier) ? raw.deepTier : 'standard';
       return state;
     }
 
@@ -633,6 +638,8 @@ window.__ModuleLoader__.load({
         ocr: state.ocr,
         subtitles: state.subtitles,
         context: state.context,
+        deepJobId: state.deepJobId,
+        deepTier: state.deepTier,
       });
     }
 
@@ -1680,6 +1687,92 @@ window.__ModuleLoader__.load({
       });
     }
 
+    // ---------------------------------------------------------------------
+    // 深度拉片（分段流水线）：后台任务 + 轮询进度 + 刷新恢复
+    // ---------------------------------------------------------------------
+
+    let deepPollTimer = null;
+
+    function stopDeepPolling() {
+      if (deepPollTimer !== null) {
+        clearTimeout(deepPollTimer);
+        deepPollTimer = null;
+      }
+    }
+
+    function scheduleDeepPoll(jobId, delay = 2000) {
+      stopDeepPolling();
+      deepPollTimer = setTimeout(() => {
+        deepPollTimer = null;
+        void pollDeepJob(jobId);
+      }, delay);
+    }
+
+    async function pollDeepJob(jobId) {
+      const id = jobId || store.getSnapshot().deepJobId;
+      if (!id) return;
+      try {
+        const job = await invoke('getDeepJob', { jobId: id });
+        store.set((previous) => ({ ...previous, deepJobId: id, deepJob: job, deepError: '' }));
+        if (job && (job.status === 'running' || job.status === 'pending')) {
+          scheduleDeepPoll(id);
+        } else {
+          stopDeepPolling();
+        }
+      } catch (error) {
+        stopDeepPolling();
+        flash('error', errorText(error));
+      }
+    }
+
+    async function startDeepAnalysis() {
+      const state = store.getSnapshot();
+      const video = state.video;
+      if (!video || !video.path) {
+        flash('warn', T('deep.needVideo'));
+        return;
+      }
+      const autoShots = video.autoShots;
+      if (!autoShots || !Array.isArray(autoShots.shots) || autoShots.shots.length === 0) {
+        flash('warn', T('deep.needShots'));
+        return;
+      }
+      await runTask('deep-start', async () => {
+        flash('info', T('deep.starting'));
+        const data = await invoke('startDeepAnalysis', {
+          videoPath: video.path,
+          shots: autoShots.shots,
+          tier: state.deepTier || 'standard',
+          subtitles: state.subtitles,
+          context: state.context,
+        });
+        store.set((previous) => ({
+          ...previous,
+          deepJobId: data.jobId,
+          deepJob: {
+            id: data.jobId,
+            status: 'running',
+            progress: { phase: 'starting', completed: 0, total: null },
+            segments: [],
+            usage: { inputTokens: 0, outputTokens: 0, estimatedCostCny: 0 },
+          },
+        }));
+        scheduleDeepPoll(data.jobId, 1500);
+        flash('success', T('deep.started'));
+      });
+    }
+
+    async function cancelDeepAnalysis() {
+      const id = store.getSnapshot().deepJobId;
+      if (!id) return;
+      try {
+        await invoke('cancelDeepJob', { jobId: id });
+        await pollDeepJob(id);
+      } catch (error) {
+        flash('error', errorText(error));
+      }
+    }
+
     function buildReportMarkdown() {
       const state = store.getSnapshot();
       const dimensions = dimensionsOf(state);
@@ -2003,6 +2096,11 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-primary);
 }
 .fa-ai-warn { color: var(--dsw-alias-state-warn-primary); }
+.fa-progress { height: 8px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
+.fa-progress-bar { height: 100%; background: var(--dsw-alias-brand-primary); transition: width 0.3s ease; }
+.fa-deep-seg { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 6px 8px; }
+.fa-deep-seg > summary { cursor: pointer; font-size: 12px; font-weight: 600; }
+.fa-deep-seg[open] > summary { margin-bottom: 6px; }
 /* ---- AI 结果 Markdown ---- */
 .fa-md {
   max-height: 560px;
@@ -3150,6 +3248,196 @@ window.__ModuleLoader__.load({
           defaultOpen: subtitles.length > 0 || Boolean(context.story) || Boolean(context.characters),
         },
         body,
+      );
+    }
+
+    // ---------------------------------------------------------------------
+    // 区块/页面：深度拉片（分段流水线）
+    // ---------------------------------------------------------------------
+
+    function deepPercent(job) {
+      const progress = job && job.progress ? job.progress : null;
+      if (!progress || !progress.total) return 0;
+      return Math.max(0, Math.min(100, Math.round((Number(progress.completed) / Number(progress.total)) * 100)));
+    }
+
+    function deepStatusLabel(t, status) {
+      if (status === 'running' || status === 'pending') return t('deep.running');
+      if (status === 'done') return t('deep.done');
+      if (status === 'error') return t('deep.error');
+      if (status === 'cancelled') return t('deep.cancelled');
+      return t('deep.empty');
+    }
+
+    function DeepSection(props) {
+      const t = props.t;
+      const state = props.state;
+      const job = state.deepJob || null;
+      const status = job && job.status ? job.status : 'idle';
+      const percent = deepPercent(job);
+      const busy = Boolean(state.busy['deep-start']);
+      const summary = job
+        ? `${deepStatusLabel(t, status)}${job.progress && job.progress.total ? ` · ${job.progress.completed}/${job.progress.total}` : ''}`
+        : t('deep.summaryEmpty');
+      const body = h(
+        'div',
+        { className: 'fa-stack' },
+        h('div', { className: 'fa-hint' }, t('deep.hint')),
+        h(
+          'div',
+          { className: 'fa-row' },
+          h('span', { className: 'fa-label' }, t('deep.tier')),
+          ['fast', 'standard', 'precise'].map((tier) =>
+            h(FaButton, {
+              key: tier,
+              small: true,
+              variant: (state.deepTier || 'standard') === tier ? 'primary' : 'ghost',
+              label: t(`deep.tier${tier.charAt(0).toUpperCase()}${tier.slice(1)}`),
+              onClick: () => store.set((previous) => ({ ...previous, deepTier: tier })),
+            }),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'fa-row' },
+          h(FaButton, {
+            label: busy ? t('deep.starting') : t('deep.start'),
+            variant: 'primary',
+            busy,
+            disabled: busy || status === 'running',
+            onClick: () => void startDeepAnalysis(),
+          }),
+          status === 'running'
+            ? h(FaButton, { label: t('deep.cancel'), small: true, variant: 'ghost', onClick: () => void cancelDeepAnalysis() })
+            : null,
+          job && props.openView
+            ? h(FaButton, {
+                label: t('deep.open'),
+                small: true,
+                onClick: () => props.openView('film-deep', ''),
+              })
+            : null,
+        ),
+        job && job.progress && job.progress.total
+          ? h('div', { className: 'fa-progress' }, h('div', { className: 'fa-progress-bar', style: { width: `${percent}%` } }))
+          : null,
+        job && job.progress
+          ? h(
+              'div',
+              { className: 'fa-hint' },
+              `${t('deep.progress')}：${job.progress.completed || 0}/${job.progress.total || '?'}${
+                job.usage && job.usage.estimatedCostCny !== undefined ? ` · ≈¥${job.usage.estimatedCostCny}` : ''
+              }`,
+            )
+          : null,
+        job && job.error ? h('div', { className: 'fa-hint fa-ai-warn' }, job.error) : null,
+      );
+      return h(FaSection, { t, title: t('deep.title'), summary, defaultOpen: Boolean(job) }, body);
+    }
+
+    function DeepView(props) {
+      const t = typeof props.t === 'function' ? props.t : (key) => key;
+      const state = useStoreValue();
+      const job = state.deepJob || null;
+      const status = job && job.status ? job.status : 'idle';
+      const percent = deepPercent(job);
+      const openView = typeof props.openView === 'function' ? props.openView : null;
+      useEffect(() => {
+        if (state.deepJobId) void pollDeepJob(state.deepJobId);
+        return () => stopDeepPolling();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      const result = job && job.result ? job.result : null;
+      const segments = job && Array.isArray(job.segments) ? job.segments : [];
+      return h(
+        'div',
+        { className: 'fa-root fa-view' },
+        h(FaStyles),
+        h(
+          'div',
+          { className: 'fa-view-scroll' },
+          h(
+            'header',
+            { className: 'fa-view-head' },
+            h(
+              'div',
+              { className: 'fa-view-head-row' },
+              h('h1', { className: 'fa-view-title' }, t('deep.title')),
+              h(FaBadge, { text: t(`deep.tier${(job && job.tier ? job.tier : state.deepTier || 'standard').charAt(0).toUpperCase()}${(job && job.tier ? job.tier : state.deepTier || 'standard').slice(1)}`), kind: 'ok' }),
+            ),
+            h('div', { className: 'fa-view-sub' }, t('deep.subtitle')),
+          ),
+          h(
+            'div',
+            { className: 'fa-panel' },
+            h(
+              'div',
+              { className: 'fa-row' },
+              openView ? h(FaButton, { label: t('deep.back'), small: true, onClick: () => openView('film-analysis', '') }) : null,
+              status === 'running'
+                ? h(FaButton, { label: t('deep.cancel'), small: true, variant: 'ghost', onClick: () => void cancelDeepAnalysis() })
+                : null,
+              result && result.stats
+                ? h(
+                    'span',
+                    { className: 'fa-hint' },
+                    `${t('deep.usage')}：${result.stats.usage.inputTokens}+${result.stats.usage.outputTokens} tok · ≈¥${result.stats.estimatedCostCny}`,
+                  )
+                : null,
+            ),
+            job && job.progress && job.progress.total
+              ? h('div', { className: 'fa-progress' }, h('div', { className: 'fa-progress-bar', style: { width: `${percent}%` } }))
+              : null,
+            h(
+              'div',
+              { className: 'fa-hint' },
+              status === 'idle'
+                ? t('deep.empty')
+                : status === 'running'
+                  ? `${t('deep.running')}：${(job.progress && job.progress.completed) || 0}/${(job.progress && job.progress.total) || '?'}`
+                  : deepStatusLabel(t, status),
+            ),
+            job && job.createdAt
+              ? h('div', { className: 'fa-hint' }, `${t('deep.startedAt')}：${new Date(job.createdAt).toLocaleString()}`)
+              : null,
+            job && job.error ? h('div', { className: 'fa-hint fa-ai-warn' }, job.error) : null,
+            result
+              ? h(
+                  'div',
+                  { className: 'fa-ai-box' },
+                  h('div', { className: 'fa-ai-head' }, h('span', { className: 'fa-ai-title' }, t('deep.final'))),
+                  h(FaMarkdown, { text: result.finalText || '' }),
+                  h(
+                    'div',
+                    { className: 'fa-row' },
+                    h(FaButton, { label: t('deep.copyFinal'), small: true, onClick: () => void copyWithFeedback(result.finalText || '') }),
+                    h(FaButton, { label: t('deep.copyAll'), small: true, variant: 'ghost', onClick: () => void copyWithFeedback(job.markdown || result.finalText || '') }),
+                  ),
+                )
+              : null,
+            segments.length > 0
+              ? h(
+                  'div',
+                  { className: 'fa-stack' },
+                  h('span', { className: 'fa-label' }, t('deep.segments')),
+                  segments.map((segment) =>
+                    h(
+                      'details',
+                      { key: segment.index, className: 'fa-deep-seg' },
+                      h(
+                        'summary',
+                        null,
+                        `#${segment.index} · ${formatSeconds(segment.start)}–${formatSeconds(segment.end)}${
+                          segment.summary ? ` · ${String(segment.summary).slice(0, 60)}` : ''
+                        }`,
+                      ),
+                      h(FaMarkdown, { text: segment.markdown || '' }),
+                    ),
+                  ),
+                )
+              : null,
+          ),
+        ),
       );
     }
 
@@ -4368,6 +4656,8 @@ window.__ModuleLoader__.load({
       const panelRef = useRef(null);
       useEffect(() => {
         ensureKnowledge(false);
+        const snapshot = store.getSnapshot();
+        if (snapshot.deepJobId) void pollDeepJob(snapshot.deepJobId);
         return undefined;
       }, []);
       return h(
@@ -4377,6 +4667,7 @@ window.__ModuleLoader__.load({
         h(ImportSection, { t, state }),
         h(ContextSection, { t, state }),
         h(AutoShotsSection, { t, state, inputActions: props.inputActions }),
+        h(DeepSection, { t, state, openView: props.openView }),
         h(MeasureSection, { t, state }),
         h(AnalysisFormSection, { t, state }),
         h(KnowledgeSection, { t, state }),
@@ -4406,7 +4697,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'fa-view-head-row' }, h('h1', { className: 'fa-view-title' }, t('view.title')), badges),
             h('div', { className: 'fa-view-sub' }, t('view.subtitle')),
           ),
-          h(AnalysisPanel, { t, inputActions: props.inputActions }),
+          h(AnalysisPanel, { t, inputActions: props.inputActions, openView: props.openView }),
         ),
       );
     }
@@ -4615,6 +4906,34 @@ window.__ModuleLoader__.load({
       'shots.detailFast': '快速',
       'shots.detailDetailed': '详细',
       'shots.detailHint': '快速=少帧短分析（约 20–40 秒）；详细=多帧长分析（约 1–2 分钟）。',
+      'deep.title': '深度拉片（分段流水线）',
+      'deep.subtitle': '切段 → 证据包 → 段级分析 → 滚动摘要 → 全片汇总；后台运行，可切换页面或刷新后恢复',
+      'deep.hint': '先「检测镜头」，再选档位启动；任务后台运行，分段结果在「深度拉片」标签页查看，失败可续。',
+      'deep.tier': '档位',
+      'deep.tierFast': '快',
+      'deep.tierStandard': '标准',
+      'deep.tierPrecise': '精',
+      'deep.start': '开始深度拉片',
+      'deep.starting': '正在启动…',
+      'deep.started': '已启动（后台运行）',
+      'deep.cancel': '取消任务',
+      'deep.cancelled': '已取消',
+      'deep.running': '运行中',
+      'deep.done': '已完成',
+      'deep.error': '失败',
+      'deep.empty': '暂无深度拉片任务',
+      'deep.summaryEmpty': '未启动',
+      'deep.needVideo': '请先导入视频。',
+      'deep.needShots': '请先「检测镜头」再启动深度拉片。',
+      'deep.open': '打开深度拉片页',
+      'deep.progress': '进度',
+      'deep.usage': '用量',
+      'deep.back': '返回分析面板',
+      'deep.segments': '分段结果',
+      'deep.final': '全片汇总报告',
+      'deep.copyFinal': '复制汇总',
+      'deep.copyAll': '复制全文',
+      'deep.startedAt': '开始时间',
       'shots.unit': '个镜头',
       'form.basis': '画面依据',
       'form.basisPlaceholder': '画面中哪些证据支撑这个判断（构图、光影、色彩、人物位置…）',
@@ -4948,6 +5267,34 @@ window.__ModuleLoader__.load({
       'shots.detailFast': 'Fast',
       'shots.detailDetailed': 'Detailed',
       'shots.detailHint': 'Fast = fewer frames & shorter text (~20–40s); Detailed = more frames & longer text (~1–2 min).',
+      'deep.title': 'Deep analysis (segmented pipeline)',
+      'deep.subtitle': 'Segments → evidence packs → per-segment analysis → rolling summary → aggregate; runs in background and survives refresh',
+      'deep.hint': 'Detect shots first, choose a tier, then start. Results are shown in the Deep analysis tab; the job keeps running in background and can resume.',
+      'deep.tier': 'Tier',
+      'deep.tierFast': 'Fast',
+      'deep.tierStandard': 'Standard',
+      'deep.tierPrecise': 'Precise',
+      'deep.start': 'Start deep analysis',
+      'deep.starting': 'Starting…',
+      'deep.started': 'Started (background)',
+      'deep.cancel': 'Cancel job',
+      'deep.cancelled': 'Cancelled',
+      'deep.running': 'Running',
+      'deep.done': 'Done',
+      'deep.error': 'Failed',
+      'deep.empty': 'No deep-analysis job yet',
+      'deep.summaryEmpty': 'Not started',
+      'deep.needVideo': 'Import a video first.',
+      'deep.needShots': 'Detect shots before starting deep analysis.',
+      'deep.open': 'Open deep analysis page',
+      'deep.progress': 'Progress',
+      'deep.usage': 'Usage',
+      'deep.back': 'Back to analysis panel',
+      'deep.segments': 'Segment results',
+      'deep.final': 'Full report',
+      'deep.copyFinal': 'Copy report',
+      'deep.copyAll': 'Copy everything',
+      'deep.startedAt': 'Started at',
       'shots.unit': 'shots',
       'form.basis': 'Visual evidence',
       'form.basisPlaceholder': 'Which visual evidence supports this judgment (composition, light, color, subject placement…)',
@@ -5164,6 +5511,19 @@ window.__ModuleLoader__.load({
             label: () => T('view.title'),
           },
           AnalysisView,
+        ),
+      );
+
+      ctx.slots.inject('conversation.view', () =>
+        ctx.slots.register(
+          {
+            name: 'conversation.view',
+            id: 'film-deep',
+            order: 21,
+            locale: NS,
+            label: () => T('deep.title'),
+          },
+          DeepView,
         ),
       );
 
