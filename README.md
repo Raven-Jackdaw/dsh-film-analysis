@@ -42,7 +42,7 @@
 
 > 请用 plugin_manager 安装插件，install_bundle 的 target 是 dsh-film-analysis
 
-首次安装会提示批准 	esseract.js 的构建脚本（内容仅为开源项目捐赠提示，不安装任何东西，可放心允许）；工具链（ffmpeg/ffprobe/中文 OCR）会随 npm 依赖自动下载。
+首次安装会提示批准 tesseract.js 的构建脚本（内容仅为开源项目捐赠提示，不安装任何东西，可放心允许）；工具链（ffmpeg/ffprobe/中文 OCR）会随 npm 依赖自动下载。
 
 ### 方式 A：下载 Release 里的离线包（推荐，Windows x64）
 
