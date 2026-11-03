@@ -1762,6 +1762,18 @@ window.__ModuleLoader__.load({
       });
     }
 
+    async function resumeDeepAnalysis() {
+      const id = store.getSnapshot().deepJobId;
+      if (!id) return;
+      try {
+        await invoke('resumeDeepJob', { jobId: id });
+        await pollDeepJob(id);
+        flash('success', T('deep.resumed'));
+      } catch (error) {
+        flash('error', errorText(error));
+      }
+    }
+
     async function cancelDeepAnalysis() {
       const id = store.getSnapshot().deepJobId;
       if (!id) return;
@@ -3438,6 +3450,9 @@ window.__ModuleLoader__.load({
           status === 'running'
             ? h(FaButton, { label: t('deep.cancel'), small: true, variant: 'ghost', onClick: () => void cancelDeepAnalysis() })
             : null,
+          status === 'stalled'
+            ? h(FaButton, { label: t('deep.resume'), small: true, onClick: () => void resumeDeepAnalysis() })
+            : null,
           job && props.openView
             ? h(FaButton, {
                 label: t('deep.open'),
@@ -3504,6 +3519,9 @@ window.__ModuleLoader__.load({
               openView ? h(FaButton, { label: t('deep.back'), small: true, onClick: () => openView('film-analysis', '') }) : null,
               status === 'running'
                 ? h(FaButton, { label: t('deep.cancel'), small: true, variant: 'ghost', onClick: () => void cancelDeepAnalysis() })
+                : null,
+              status === 'stalled'
+                ? h(FaButton, { label: t('deep.resume'), small: true, onClick: () => void resumeDeepAnalysis() })
                 : null,
               result && result.stats
                 ? h(
