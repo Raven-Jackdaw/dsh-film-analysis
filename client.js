@@ -368,6 +368,7 @@ window.__ModuleLoader__.load({
         busy: {},
         knowledge: emptyKnowledgeState(),
         aiResults: {},
+        videoReport: null,
       };
     }
 
@@ -1527,7 +1528,7 @@ window.__ModuleLoader__.load({
       await runTask('shots', async () => {
         flash('info', T('shots.detecting'));
         const data = await invoke('autoShots', { videoPath: state.video.path, maxShots: 12 });
-        store.set((previous) => ({ ...previous, video: { ...previous.video, autoShots: data } }));
+        store.set((previous) => ({ ...previous, video: { ...previous.video, autoShots: data }, videoReport: null }));
         flash('success', `${T('shots.detected')}：${asNumberOrDash(data.returned)} / ${asNumberOrDash(data.totalShots)}`);
       });
     }
@@ -1578,6 +1579,34 @@ window.__ModuleLoader__.load({
           aiResults: { ...(previous.aiResults || {}), [key]: { ...data, at: Date.now() } },
         }));
         const seconds = data && data.timings ? Math.round((data.timings.totalMs || 0) / 1000) : null;
+        flash('success', `${T('shots.aiDone')}${seconds !== null ? `（${seconds}s）` : ''}`);
+      });
+    }
+
+    /** 整片拉片报告：一次模型调用覆盖全部镜头。 */
+    async function analyzeVideoReport() {
+      const state = store.getSnapshot();
+      if (!state.video || !state.video.path || !state.video.autoShots) {
+        flash('warn', T('shots.needVideo'));
+        return;
+      }
+      await runTask('video-report', async () => {
+        flash('info', T('shots.videoReportBusy'));
+        const data = state.video.autoShots;
+        const result = await invoke('aiAnalyzeVideoReport', {
+          videoPath: state.video.path,
+          shots: data.shots.map((shot) => ({
+            index: shot.index,
+            start: shot.start,
+            end: shot.end,
+            duration: shot.duration,
+            longShot: shot.longShot,
+            frames: shot.frames || null,
+            metrics: shot.metrics || null,
+          })),
+        });
+        store.set((previous) => ({ ...previous, videoReport: { ...result, at: Date.now() } }));
+        const seconds = result && result.timings ? Math.round((result.timings.totalMs || 0) / 1000) : null;
         flash('success', `${T('shots.aiDone')}${seconds !== null ? `（${seconds}s）` : ''}`);
       });
     }
@@ -2634,6 +2663,7 @@ window.__ModuleLoader__.load({
       const ai = aiKey ? aiResults[aiKey] || null : null;
       const aiBusy = aiKey ? Boolean(state.busy[`ai-${aiKey}`]) : false;
       const isSegment = aiKey.includes('-');
+      const report = state.videoReport || null;
       const summary = data ? `${asNumberOrDash(data.returned)} / ${asNumberOrDash(data.totalShots)}` : t('shots.summaryEmpty');
       let body;
       if (!video || !video.path) {
@@ -2653,6 +2683,14 @@ window.__ModuleLoader__.load({
               disabled: busy,
               onClick: () => detectAutoShots(),
             }),
+            data
+              ? h(FaButton, {
+                  label: state.busy['video-report'] ? t('shots.videoReportBusy') : t('shots.videoReport'),
+                  busy: Boolean(state.busy['video-report']),
+                  disabled: busy || Boolean(state.busy['video-report']),
+                  onClick: () => analyzeVideoReport(),
+                })
+              : null,
             data ? h(FaBadge, { text: `${asNumberOrDash(data.totalShots)} ${t('shots.unit')}`, kind: 'ok' }) : null,
           ),
           data
@@ -2810,6 +2848,43 @@ window.__ModuleLoader__.load({
                       }),
                     )
                   : null,
+              )
+            : null,
+          report
+            ? h(
+                'div',
+                { className: 'fa-ai-box' },
+                h(
+                  'div',
+                  { className: 'fa-ai-head' },
+                  h('span', { className: 'fa-ai-title' }, t('shots.videoReportTitle')),
+                  h(FaBadge, {
+                    text: report.mode === 'vision' ? t('shots.aiModeVision') : t('shots.aiModeText'),
+                    kind: report.mode === 'vision' ? 'ok' : 'warn',
+                  }),
+                  report.usage
+                    ? h(
+                        'span',
+                        { className: 'fa-hint' },
+                        `${t('shots.aiUsage')}：${asNumberOrDash(report.usage.totalTokens ?? (asFiniteNumber(report.usage.inputTokens) || 0) + (asFiniteNumber(report.usage.outputTokens) || 0))} tok${
+                          report.estimatedCostCny !== null && report.estimatedCostCny !== undefined ? ` · ≈¥${report.estimatedCostCny}` : ''
+                        }`,
+                      )
+                    : null,
+                ),
+                report.truncated ? h('div', { className: 'fa-hint fa-ai-warn' }, t('shots.aiTruncated')) : null,
+                h('pre', { className: 'fa-ai-text' }, report.text),
+                h(
+                  'div',
+                  { className: 'fa-row' },
+                  h(FaButton, {
+                    label: t('shots.aiCopy'),
+                    variant: 'ghost',
+                    small: true,
+                    onClick: () => void copyWithFeedback(report.text),
+                  }),
+                  h(FaButton, { label: t('shots.videoReportRerun'), small: true, onClick: () => analyzeVideoReport() }),
+                ),
               )
             : null,
           data && data.truncated ? h('div', { className: 'fa-hint' }, t('shots.truncated')) : null,
@@ -3941,6 +4016,10 @@ window.__ModuleLoader__.load({
       'shots.aiSegment': '分段',
       'shots.aiSegments': '长镜头分段分析：',
       'shots.aiTruncated': '输出达到长度上限被截断；可点「重新分析」或改用分段分析以获得完整内容。',
+      'shots.videoReport': '整片拉片报告',
+      'shots.videoReportBusy': '正在生成整片报告…',
+      'shots.videoReportTitle': '整片拉片报告（一次模型调用覆盖全片）',
+      'shots.videoReportRerun': '重新生成报告',
       'shots.aiTextOnlyWarning': '当前模型未能接收图片，本结果主要基于客观数据与 OCR，画面语义可能不完整。',
       'shots.detect': '自动检测镜头',
       'shots.detected': '镜头检测完成',
@@ -4234,6 +4313,10 @@ window.__ModuleLoader__.load({
       'shots.aiSegment': 'segment',
       'shots.aiSegments': 'Long-take segments:',
       'shots.aiTruncated': 'Output hit the length limit and was truncated; click Analyze again or analyze by segment for the full text.',
+      'shots.videoReport': 'Full-video report',
+      'shots.videoReportBusy': 'Generating full-video report…',
+      'shots.videoReportTitle': 'Full-video shot-by-shot report (one model call)',
+      'shots.videoReportRerun': 'Regenerate report',
       'shots.aiTextOnlyWarning': 'The model could not receive images; this result is based mainly on objective data and OCR, so visual semantics may be incomplete.',
       'shots.detect': 'Detect shots',
       'shots.detected': 'Shots detected',

@@ -16,8 +16,9 @@
 - **视频工具**：ffprobe 元信息、按时间点/区间抽帧、多帧接触表（接触表可直接交给视觉模型看全场）
 - **中文 OCR**：离线识别画面字幕/文字（tesseract.js + chi_sim），首次初始化需十余秒
 - **大视频**：上传上限 8GB（流式写入，不占内存）；更大的视频可直接填绝对路径导入，走本地读取、完全不上传
-- **自动拉片**：自动检测镜头切换，为每个镜头抽代表帧并测量；在面板里点任一镜头，插件会自动生成该镜头的分析提示词并发送给会话 AI，由 AI 输出该镜头的八维视听语言分析
-- **11 个 Agent 工具**：面板里的操作同时暴露为 `film_*` 工具，会话里的 AI 也能直接调用
+- **自动拉片 + 面板内一键 AI 分析**：自动检测镜头切换（长镜头自动多帧、自动裁黑边），点任一镜头直接在面板里生成「拉片讲解式」八维分析（片段级运动/亮度/声音 + 多帧看图），可复制/重新分析；长镜头自动按 60 秒分段，可逐段分析
+- **整片拉片报告**：一次模型调用输出全片分镜表 + 逐镜头讲解 + 节奏结构 + 风格主题（面板内显示，带 token 用量与费用估算）
+- **13 个 Agent 工具**：面板里的操作同时暴露为 `film_*` 工具，会话里的 AI 也能直接调用
 
 ## 安装
 
@@ -79,4 +80,4 @@ docs/                 # README 图片与知识数据说明
 
 ## English
 
-A DeepSeek Harness Web UI plugin for film / audiovisual-language analysis: measure frame metrics, fill an 8-dimension analysis form, annotate frames, generate structured prompts for the conversation agent, and export Markdown reports and shot-list CSV. ffmpeg/ffprobe/Chinese OCR are installed as npm dependencies. Install the plugin bundle via `plugin_manager` in a Cordis-preset session, then refresh the Web UI. Requires DSH `>=0.2.1-rc.2 <0.3.0`; Windows x64 tested. The bundled knowledge data is generic terminology only — no textbook excerpts. Code is MIT-licensed; runtime dependencies keep their own licenses.
+A DeepSeek Harness Web UI plugin for film / audiovisual-language analysis: measure frame metrics, fill an 8-dimension analysis form, annotate frames, generate structured prompts for the conversation agent, and export Markdown reports and shot-list CSV. It also detects shots and produces one-click shot analysis and full-video shot-by-shot reports inside the panel (clip-level motion / brightness / audio + multiple frames, with token/cost display). ffmpeg/ffprobe/Chinese OCR are installed as npm dependencies. Install the plugin bundle via `plugin_manager` in a Cordis-preset session, then refresh the Web UI. Requires DSH `>=0.2.1-rc.2 <0.3.0`; Windows x64 tested. The bundled knowledge data is generic terminology only — no textbook excerpts. Code is MIT-licensed; runtime dependencies keep their own licenses.
