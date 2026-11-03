@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 影视画面分析器 · Client 端（DSH Web UI 插件，单文件纯 JS）
  *
  * 结构（自上而下）：
@@ -369,6 +369,8 @@ window.__ModuleLoader__.load({
         knowledge: emptyKnowledgeState(),
         aiResults: {},
         videoReport: null,
+        subtitles: [],
+        context: { title: '', genre: '', story: '', characters: '', note: '' },
       };
     }
 
@@ -494,6 +496,62 @@ window.__ModuleLoader__.load({
       return colors.length > 0 ? { colors } : null;
     }
 
+    function sanitizeSubtitles(raw) {
+      if (!Array.isArray(raw)) return [];
+      const lines = [];
+      for (const item of raw) {
+        if (!isRecord(item)) continue;
+        const text = asString(item.text).trim();
+        if (text === '') continue;
+        const start = asFiniteNumber(item.start);
+        const end = asFiniteNumber(item.end);
+        lines.push({ text, start: Number.isFinite(start) ? start : null, end: Number.isFinite(end) ? end : null });
+      }
+      return lines.slice(0, 3000);
+    }
+
+    function sanitizeContext(raw) {
+      if (!isRecord(raw)) return { title: '', genre: '', story: '', characters: '', note: '' };
+      return {
+        title: asString(raw.title),
+        genre: asString(raw.genre),
+        story: asString(raw.story),
+        characters: asString(raw.characters),
+        note: asString(raw.note),
+      };
+    }
+
+    function parseSubtitleText(value) {
+      const text = String(value || '').replace(/\r/g, '');
+      const lines = text.split('\n');
+      const timeRe = /(\d{1,2}):(\d{2}):(\d{2})[,.]+(\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.]+(\d{1,3})/;
+      const toSeconds = (hours, minutes, seconds, millis) =>
+        Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds) + Number(String(millis).padEnd(3, '0')) / 1000;
+      const entries = [];
+      let current = null;
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (line === '') continue;
+        const match = timeRe.exec(line);
+        if (match) {
+          if (current) entries.push(current);
+          current = {
+            start: toSeconds(match[1], match[2], match[3], match[4]),
+            end: toSeconds(match[5], match[6], match[7], match[8]),
+            text: '',
+          };
+          continue;
+        }
+        if (current) {
+          current.text += `${current.text ? ' ' : ''}${line.replace(/<[^>]+>/g, '')}`;
+        } else if (!/^\d+$/.test(line)) {
+          entries.push({ start: null, end: null, text: line.replace(/<[^>]+>/g, '') });
+        }
+      }
+      if (current) entries.push(current);
+      return entries.filter((entry) => entry.text.trim() !== '').slice(0, 3000);
+    }
+
     function hydrateState(raw) {
       const state = createEmptyState();
       if (!isRecord(raw) || raw.version !== PERSIST_VERSION) return state;
@@ -507,6 +565,8 @@ window.__ModuleLoader__.load({
       state.annotation = sanitizeAnnotation(raw.annotation);
       state.shots = sanitizeShots(raw.shots);
       state.ocr = sanitizeOcr(raw.ocr);
+      state.subtitles = sanitizeSubtitles(raw.subtitles);
+      state.context = sanitizeContext(raw.context);
       return state;
     }
 
@@ -571,6 +631,8 @@ window.__ModuleLoader__.load({
         annotation: state.annotation,
         shots: state.shots,
         ocr: state.ocr,
+        subtitles: state.subtitles,
+        context: state.context,
       });
     }
 
@@ -1573,6 +1635,8 @@ window.__ModuleLoader__.load({
           frames: shot.frames || [{ time: shot.time, path: shot.framePath, url: shot.frameUrl }],
           metrics: shot.metrics || null,
           detail,
+          subtitles: state.subtitles,
+          context: state.context,
           prevShot: prevShot ? { start: prevShot.start, end: prevShot.end } : null,
           nextShot: nextShot ? { start: nextShot.start, end: nextShot.end } : null,
         });
@@ -1598,6 +1662,8 @@ window.__ModuleLoader__.load({
         const result = await invoke('aiAnalyzeVideoReport', {
           videoPath: state.video.path,
           detail,
+          subtitles: state.subtitles,
+          context: state.context,
           shots: data.shots.map((shot) => ({
             index: shot.index,
             start: shot.start,
@@ -1967,6 +2033,18 @@ window.__ModuleLoader__.load({
 .fa-shot-card-busy { opacity: 0.65; cursor: progress; }
 .fa-shot-options { align-items: center; gap: 8px; flex-wrap: wrap; }
 .fa-range { width: 160px; accent-color: var(--dsw-alias-brand-primary); }
+.fa-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fa-textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+  color: inherit;
+  box-sizing: border-box;
+}
 .fa-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; word-break: break-all; }
 .fa-divider { height: 1px; background: var(--dsw-alias-border-l1); margin: 2px 0; }
 /* ---- 按钮 ---- */
@@ -2920,6 +2998,139 @@ window.__ModuleLoader__.load({
     // =========================================================================
     // 6A-2. 区块：自动拉片（检测镜头 → 点击镜头让会话 AI 输出八维分析）
     // =========================================================================
+
+    function ContextSection(props) {
+      const t = props.t;
+      const state = props.state;
+      const fileRef = useRef(null);
+      const subtitles = Array.isArray(state.subtitles) ? state.subtitles : [];
+      const context = state.context || {};
+      const timed = subtitles.filter((line) => Number.isFinite(line.start));
+      const summary = subtitles.length > 0 ? `${t('ctx.summarySubtitles')} ${subtitles.length}` : t('ctx.summaryEmpty');
+      const setContextField = (key, value) => {
+        store.set((previous) => ({ ...previous, context: { ...(previous.context || {}), [key]: value } }));
+      };
+      const importSubtitleFile = async (file) => {
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const entries = parseSubtitleText(text);
+          if (entries.length === 0) {
+            flash('warn', T('ctx.parseFailed'));
+            return;
+          }
+          store.set((previous) => ({ ...previous, subtitles: entries }));
+          flash('success', `${T('ctx.imported')}：${entries.length}`);
+        } catch (error) {
+          flash('error', errorText(error));
+        }
+      };
+      const body = h(
+        'div',
+        { className: 'fa-stack' },
+        h('div', { className: 'fa-hint' }, t('ctx.hint')),
+        h(
+          'div',
+          { className: 'fa-row' },
+          h(FaButton, {
+            label: t('ctx.import'),
+            small: true,
+            onClick: () => {
+              if (fileRef.current) fileRef.current.click();
+            },
+          }),
+          subtitles.length > 0
+            ? h(FaButton, {
+                label: t('ctx.clear'),
+                small: true,
+                variant: 'ghost',
+                onClick: () => {
+                  store.set((previous) => ({ ...previous, subtitles: [] }));
+                },
+              })
+            : null,
+          h(
+            'span',
+            { className: 'fa-hint' },
+            subtitles.length > 0
+              ? `${t('ctx.imported')} ${subtitles.length}${
+                  timed.length > 1 ? ` · ${formatSeconds(timed[0].start)}–${formatSeconds(timed[timed.length - 1].start)}` : ''
+                }`
+              : t('ctx.empty'),
+          ),
+        ),
+        h('input', {
+          ref: fileRef,
+          type: 'file',
+          accept: '.srt,.vtt,.txt,text/plain',
+          className: 'fa-hidden-input',
+          tabIndex: -1,
+          onChange: (event) => {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            void importSubtitleFile(file);
+          },
+        }),
+        h(
+          'div',
+          { className: 'fa-form-grid' },
+          h(
+            FaField,
+            { label: t('ctx.work') },
+            h('input', {
+              className: 'fa-input',
+              type: 'text',
+              value: context.title || '',
+              placeholder: t('ctx.workPlaceholder'),
+              onChange: (event) => setContextField('title', event.target.value),
+            }),
+          ),
+          h(
+            FaField,
+            { label: t('ctx.genre') },
+            h('input', {
+              className: 'fa-input',
+              type: 'text',
+              value: context.genre || '',
+              placeholder: t('ctx.genrePlaceholder'),
+              onChange: (event) => setContextField('genre', event.target.value),
+            }),
+          ),
+        ),
+        h(
+          FaField,
+          { label: t('ctx.story') },
+          h('textarea', {
+            className: 'fa-input fa-textarea',
+            rows: 3,
+            value: context.story || '',
+            placeholder: t('ctx.storyPlaceholder'),
+            onChange: (event) => setContextField('story', event.target.value),
+          }),
+        ),
+        h(
+          FaField,
+          { label: t('ctx.characters') },
+          h('textarea', {
+            className: 'fa-input fa-textarea',
+            rows: 2,
+            value: context.characters || '',
+            placeholder: t('ctx.charactersPlaceholder'),
+            onChange: (event) => setContextField('characters', event.target.value),
+          }),
+        ),
+      );
+      return h(
+        FaSection,
+        {
+          t,
+          title: t('ctx.title'),
+          summary,
+          defaultOpen: subtitles.length > 0 || Boolean(context.story) || Boolean(context.characters),
+        },
+        body,
+      );
+    }
 
     function AutoShotsSection(props) {
       const t = props.t;
@@ -4143,6 +4354,7 @@ window.__ModuleLoader__.load({
         { className: 'fa-panel', ref: panelRef },
         h(FaStatusBanner, { t, status: state.status }),
         h(ImportSection, { t, state }),
+        h(ContextSection, { t, state }),
         h(AutoShotsSection, { t, state, inputActions: props.inputActions }),
         h(MeasureSection, { t, state }),
         h(AnalysisFormSection, { t, state }),
@@ -4355,6 +4567,23 @@ window.__ModuleLoader__.load({
       'knowledge.filterEmpty': '没有匹配的知识点。',
       'knowledge.termsUnit': '术语',
       'knowledge.filmsUnit': '片例',
+      'ctx.title': 'AI 上下文与台词（可选）',
+      'ctx.hint': '导入带时间码的字幕（.srt/.vtt）或纯文本台词，并填写影片背景/剧情/人物关系；这些会作为“可信输入”交给模型，明显减少推测。',
+      'ctx.import': '导入字幕/台词',
+      'ctx.clear': '清除台词',
+      'ctx.imported': '已导入',
+      'ctx.empty': '尚未导入台词',
+      'ctx.parseFailed': '未能解析字幕时间码；请使用 .srt/.vtt 格式，或导入纯文本。',
+      'ctx.summarySubtitles': '台词',
+      'ctx.summaryEmpty': '未导入台词',
+      'ctx.work': '作品',
+      'ctx.workPlaceholder': '影片名/剧集名（可选）',
+      'ctx.genre': '类型/年代/导演',
+      'ctx.genrePlaceholder': '如：剧情片 · 1994 · 某导演',
+      'ctx.story': '剧情梗概',
+      'ctx.storyPlaceholder': '这段戏前后发生了什么？人物处境如何？（可选）',
+      'ctx.characters': '人物关系',
+      'ctx.charactersPlaceholder': '例如：A 是 B 的上司，两人正在争夺……（可选）',
       'shots.threshold': '检测灵敏度',
       'shots.thresholdHint': '数值越低越容易检出切点（0.10–0.60，默认 0.32）。',
       'shots.detail': '分析详细度',
@@ -4667,6 +4896,23 @@ window.__ModuleLoader__.load({
       'knowledge.filterEmpty': 'No matching knowledge points.',
       'knowledge.termsUnit': 'terms',
       'knowledge.filmsUnit': 'film examples',
+      'ctx.title': 'AI context & dialogue (optional)',
+      'ctx.hint': 'Import timed subtitles (.srt/.vtt) or plain dialogue text, and fill in film background / story / character relations; these are passed to the model as trusted input and reduce speculation.',
+      'ctx.import': 'Import subtitles',
+      'ctx.clear': 'Clear subtitles',
+      'ctx.imported': 'Imported',
+      'ctx.empty': 'No subtitles imported',
+      'ctx.parseFailed': 'Could not parse subtitle timing; use .srt/.vtt or plain text.',
+      'ctx.summarySubtitles': 'subtitles',
+      'ctx.summaryEmpty': 'no subtitles',
+      'ctx.work': 'Work',
+      'ctx.workPlaceholder': 'Film/series title (optional)',
+      'ctx.genre': 'Genre/year/director',
+      'ctx.genrePlaceholder': 'e.g. drama · 1994 · director',
+      'ctx.story': 'Story synopsis',
+      'ctx.storyPlaceholder': 'What happens before/after this scene? (optional)',
+      'ctx.characters': 'Character relations',
+      'ctx.charactersPlaceholder': 'e.g. A is B’s boss; they are fighting over… (optional)',
       'shots.threshold': 'Detection sensitivity',
       'shots.thresholdHint': 'Lower values detect more cut points (0.10–0.60, default 0.32).',
       'shots.detail': 'Analysis detail',
