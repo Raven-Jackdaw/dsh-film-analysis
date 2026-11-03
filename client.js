@@ -1459,6 +1459,84 @@ window.__ModuleLoader__.load({
       store.set((state) => ({ ...state, prompt: asString(text) }));
     }
 
+    /** 自动拉片：单个镜头的分析提示词（交给会话 AI 输出八维分析）。 */
+    function buildShotPromptText(shot) {
+      const state = store.getSnapshot();
+      const video = state.video || {};
+      const probe = video.probe;
+      const auto = video.autoShots;
+      const lines = [];
+      lines.push('【自动拉片 · 单镜头视听语言分析请求】');
+      lines.push('请分析下面这个镜头，直接输出专业的视听语言分析结果（不要只复述数据）。');
+      lines.push('');
+      lines.push('一、镜头信息');
+      lines.push(`- 来源视频：${video.path || '（未知）'}`);
+      lines.push(`- 镜号：${shot.index}${auto ? ` / 共 ${auto.totalShots}` : ''}${auto && auto.truncated ? '（抽样展示）' : ''}`);
+      lines.push(`- 时间码：${formatSeconds(shot.start)} – ${formatSeconds(shot.end)}（时长 ${formatSeconds(shot.duration)}）`);
+      lines.push(`- 代表帧时间：${formatSeconds(shot.time)}`);
+      if (probe) {
+        const audio = probe.hasAudio
+          ? `音频 ${asString(probe.audioCodec) || '?'} ${asNumberOrDash(probe.channels)}ch/${asNumberOrDash(probe.sampleRate)}Hz`
+          : '无音频流';
+        lines.push(
+          `- 视频元信息：${asNumberOrDash(probe.width)}×${asNumberOrDash(probe.height)}，${asString(probe.aspectLabel) || '画幅未知'}，${asString(probe.durationLabel) || formatSeconds(probe.duration)}，${asNumberOrDash(probe.fps)} fps，${asString(probe.codec) || '未知编码'}，${audio}`,
+        );
+      }
+      lines.push('');
+      lines.push('二、代表帧（请先调用 read_image 工具读取下面的图片再看画面）');
+      lines.push(`- 图片绝对路径：${shot.framePath}`);
+      if (shot.frameUrl) lines.push(`- 预览地址：${assetUrl(shot.frameUrl)}`);
+      lines.push('');
+      lines.push('三、客观测量数据（插件自动提取）');
+      lines.push('```json');
+      lines.push(JSON.stringify(shot.metrics || null, null, 2));
+      lines.push('```');
+      lines.push('');
+      lines.push('四、分析框架摘要');
+      lines.push(buildFrameworkSummary());
+      lines.push('');
+      lines.push('五、输出要求（直接输出结果，不要解释步骤）');
+      lines.push('1. 用 Markdown 表格按 8 个维度输出：景别 / 景深与焦距 / 角度和机位 / 光线和影调 / 色彩色调 / 构图 / 镜头运动 / 声音线索。每维写：判断 + 画面依据 + 意图与观众效果 + 专业术语。');
+      lines.push('2. 结合上面的客观测量数据说明影调、色彩与反差（引用具体数值）。');
+      lines.push('3. 说明该镜头的叙事/情绪功能，以及它与前后镜头可能的衔接关系（信息不足时说明这是推测）。');
+      lines.push('4. 若画面内有字幕或文字，可先调用 film_image_ocr 识别再一并分析。');
+      lines.push('5. 最后给出 3 条可操作的拉片/拍摄建议。');
+      lines.push('');
+      lines.push('（本提示词由"影视画面分析器"的自动拉片功能生成。）');
+      return lines.join('\n');
+    }
+
+    /** 检测镜头（自动拉片），结果存进 state.video.autoShots。 */
+    async function detectAutoShots() {
+      const state = store.getSnapshot();
+      if (!state.video || !state.video.path) {
+        flash('warn', T('shots.needVideo'));
+        return;
+      }
+      await runTask('shots', async () => {
+        flash('info', T('shots.detecting'));
+        const data = await invoke('autoShots', { videoPath: state.video.path, maxShots: 12 });
+        store.set((previous) => ({ ...previous, video: { ...previous.video, autoShots: data } }));
+        flash('success', `${T('shots.detected')}：${asNumberOrDash(data.returned)} / ${asNumberOrDash(data.totalShots)}`);
+      });
+    }
+
+    /** 点击镜头：生成提示词并直接发送给当前会话 AI。 */
+    function analyzeShot(shot, inputActions) {
+      const text = buildShotPromptText(shot);
+      if (inputActions && typeof inputActions.setDraft === 'function') {
+        inputActions.setDraft(text);
+        if (typeof inputActions.submit === 'function') {
+          inputActions.submit();
+          flash('success', T('shots.sent'));
+          return;
+        }
+        flash('success', T('shots.filled'));
+        return;
+      }
+      void copyWithFeedback(text, null).catch(() => undefined);
+    }
+
     function buildReportMarkdown() {
       const state = store.getSnapshot();
       const dimensions = dimensionsOf(state);
@@ -1739,6 +1817,25 @@ window.__ModuleLoader__.load({
 @media (max-width: 640px) { .fa-grid2 { grid-template-columns: minmax(0, 1fr); } }
 .fa-grow { flex: 1; min-width: 180px; }
 .fa-hint { font-size: 11px; color: var(--dsw-alias-label-secondary); line-height: 1.5; }
+.fa-shot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.fa-shot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.fa-shot-card:hover { border-color: var(--dsw-alias-brand-primary); }
+.fa-shot-card-active { border-color: var(--dsw-alias-brand-primary); box-shadow: inset 0 0 0 1px var(--dsw-alias-brand-primary); }
+.fa-shot-thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: #000; }
+.fa-shot-title { font-size: 12px; font-weight: 600; }
+.fa-shot-sub { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .fa-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; word-break: break-all; }
 .fa-divider { height: 1px; background: var(--dsw-alias-border-l1); margin: 2px 0; }
 /* ---- 按钮 ---- */
@@ -2447,6 +2544,77 @@ window.__ModuleLoader__.load({
         renderImageCard(),
         renderVideoCard(),
       );
+    }
+
+    // =========================================================================
+    // 6A-2. 区块：自动拉片（检测镜头 → 点击镜头让会话 AI 输出八维分析）
+    // =========================================================================
+
+    function AutoShotsSection(props) {
+      const t = props.t;
+      const state = props.state;
+      const video = state.video;
+      const data = video && video.autoShots ? video.autoShots : null;
+      const [selected, setSelected] = useState(-1);
+      const busy = Boolean(state.busy.shots);
+      const summary = data ? `${asNumberOrDash(data.returned)} / ${asNumberOrDash(data.totalShots)}` : t('shots.summaryEmpty');
+      let body;
+      if (!video || !video.path) {
+        body = h(FaEmpty, { text: t('shots.needVideo') });
+      } else {
+        body = h(
+          'div',
+          { className: 'fa-stack' },
+          h('div', { className: 'fa-hint' }, t('shots.hint')),
+          h(
+            'div',
+            { className: 'fa-row' },
+            h(FaButton, {
+              label: busy ? t('shots.detecting') : data ? t('shots.redetect') : t('shots.detect'),
+              variant: 'primary',
+              busy,
+              disabled: busy,
+              onClick: () => detectAutoShots(),
+            }),
+            data ? h(FaBadge, { text: `${asNumberOrDash(data.totalShots)} ${t('shots.unit')}`, kind: 'ok' }) : null,
+          ),
+          data
+            ? h(
+                'div',
+                { className: 'fa-shot-grid' },
+                data.shots.map((shot) =>
+                  h(
+                    'button',
+                    {
+                      key: shot.index,
+                      type: 'button',
+                      className: `fa-shot-card${selected === shot.index ? ' fa-shot-card-active' : ''}`,
+                      title: t('shots.clickHint'),
+                      onClick: () => {
+                        setSelected(shot.index);
+                        analyzeShot(shot, props.inputActions);
+                      },
+                    },
+                    h('img', { className: 'fa-shot-thumb', src: assetUrl(shot.frameUrl), alt: '' }),
+                    h(
+                      'div',
+                      { className: 'fa-shot-title' },
+                      `#${shot.index} · ${formatSeconds(shot.start)}–${formatSeconds(shot.end)}`,
+                    ),
+                    h(
+                      'div',
+                      { className: 'fa-shot-sub' },
+                      `${formatSeconds(shot.duration)}${shot.metrics ? ` · ${asNumberOrDash(shot.metrics.meanLuma)}/255` : ''}`,
+                    ),
+                  ),
+                ),
+              )
+            : h(FaEmpty, { text: t('shots.empty') }),
+          data && data.truncated ? h('div', { className: 'fa-hint' }, t('shots.truncated')) : null,
+          h('div', { className: 'fa-hint' }, t('shots.clickHint')),
+        );
+      }
+      return h(FaSection, { t, title: t('shots.title'), summary, defaultOpen: Boolean(video && video.path) }, body);
     }
 
     // =========================================================================
@@ -3387,6 +3555,7 @@ window.__ModuleLoader__.load({
         { className: 'fa-panel', ref: panelRef },
         h(FaStatusBanner, { t, status: state.status }),
         h(ImportSection, { t, state }),
+        h(AutoShotsSection, { t, state, inputActions: props.inputActions }),
         h(MeasureSection, { t, state }),
         h(AnalysisFormSection, { t, state }),
         h(AnnotateSection, { t, state }),
@@ -3549,6 +3718,20 @@ window.__ModuleLoader__.load({
       'export.shots': '分镜 / 镜头表',
       'export.shotsHint': '可直接编辑；下载为 UTF-8 BOM 编码的 CSV（列：镜号、时间码、景别、角度和机位、镜头运动、画面内容、声音、时长）。',
       'export.title': '6 · 报告与镜头表',
+      'shots.clickHint': '点击任一镜头卡片：自动生成该镜头的分析提示词并发送给会话 AI，分析结果显示在「对话」里。',
+      'shots.detect': '自动检测镜头',
+      'shots.detected': '镜头检测完成',
+      'shots.detecting': '正在检测镜头…',
+      'shots.empty': '尚未检测镜头，点击「自动检测镜头」开始。',
+      'shots.filled': '提示词已填入输入框，请发送',
+      'shots.hint': '自动检测镜头切换，为每个镜头抽代表帧并测量；点镜头即可让会话 AI 输出该镜头的八维分析。',
+      'shots.needVideo': '先在顶部导入 / 载入一个视频，再使用自动拉片。',
+      'shots.redetect': '重新检测镜头',
+      'shots.sent': '已发送给会话 AI，请切换到「对话」查看分析结果',
+      'shots.summaryEmpty': '未检测',
+      'shots.title': '自动拉片 · 点击镜头让 AI 分析',
+      'shots.truncated': '镜头较多，已等距抽样展示；可调参数或分段检测。',
+      'shots.unit': '个镜头',
       'form.basis': '画面依据',
       'form.basisPlaceholder': '画面中哪些证据支撑这个判断（构图、光影、色彩、人物位置…）',
       'form.cite': '页码引用',
@@ -3570,7 +3753,7 @@ window.__ModuleLoader__.load({
       'form.resetConfirm': '再次点击确认重置',
       'form.selectTerm': '选择术语…',
       'form.term': '术语',
-      'form.title': '3 · 八维分析表单',
+      'form.title': '3 · 八维分析表单（可选：自测 / 人工精修）',
       'form.viewDefinition': '查看定义',
       'import.busy': '上传中…',
       'import.chooseImage': '选择图片',
@@ -3806,6 +3989,20 @@ window.__ModuleLoader__.load({
       'export.shots': 'Shot list',
       'export.shotsHint': 'Editable; downloads as UTF-8 BOM CSV (shot, timecode, shot size, angle & camera, movement, content, sound, duration).',
       'export.title': '6 · Reports & shot list',
+      'shots.clickHint': 'Click any shot card: the plugin builds the analysis prompt for that shot and sends it to the conversation AI; the result appears in Chat.',
+      'shots.detect': 'Detect shots',
+      'shots.detected': 'Shots detected',
+      'shots.detecting': 'Detecting shots…',
+      'shots.empty': 'No shots detected yet. Click "Detect shots" to start.',
+      'shots.filled': 'Prompt filled into the composer; press send',
+      'shots.hint': 'Detect shot changes, extract a representative frame and measurements for each shot; click a shot to have the conversation AI analyze it.',
+      'shots.needVideo': 'Import or load a video first, then use auto shot analysis.',
+      'shots.redetect': 'Detect again',
+      'shots.sent': 'Sent to the conversation AI — switch to Chat to read the analysis',
+      'shots.summaryEmpty': 'Not detected',
+      'shots.title': 'Auto shot analysis · click a shot for AI analysis',
+      'shots.truncated': 'Too many shots; evenly sampled. Adjust parameters or analyze by segment.',
+      'shots.unit': 'shots',
       'form.basis': 'Visual evidence',
       'form.basisPlaceholder': 'Which visual evidence supports this judgment (composition, light, color, subject placement…)',
       'form.cite': 'Page citation',
@@ -3827,7 +4024,7 @@ window.__ModuleLoader__.load({
       'form.resetConfirm': 'Click again to confirm reset',
       'form.selectTerm': 'Choose a term…',
       'form.term': 'Term',
-      'form.title': '3 · Eight-dimension analysis',
+      'form.title': '3 · Eight-dimension form (optional: self-check / manual refinement)',
       'form.viewDefinition': 'View definition',
       'import.busy': 'Uploading…',
       'import.chooseImage': 'Choose image',
