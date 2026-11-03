@@ -32,7 +32,19 @@
 
 ## 安装
 
-### 方式 D：npm 包（最省事，DSH 用户推荐）\n\n本插件已发布到 npm：**dsh-film-analysis**（https://www.npmjs.com/package/dsh-film-analysis）\n\n在 DSH 的 cordis 预设会话中对 AI 说：\n\n> 请用 plugin_manager 安装插件，install_bundle 的 target 是 dsh-film-analysis\n\n首次安装会提示批准 	esseract.js 的构建脚本（内容仅为开源项目捐赠提示，不安装任何东西，可放心允许）；工具链（ffmpeg/ffprobe/中文 OCR）会随 npm 依赖自动下载。\n\n### 方式 A：下载 Release 里的离线包（推荐，Windows x64）
+### 方式 D：npm 包（最省事，DSH 用户推荐）
+
+本插件已发布到 npm：**dsh-film-analysis**（https://www.npmjs.com/package/dsh-film-analysis）
+
+> ⚠️ 注意：npm 版本可能滞后于本仓库。当前 npm 最新为 **0.1.0**；需要 v0.2.0 新功能（扩充知识库 / Markdown 渲染等）请用下面的 Release 离线包，或等 npm 更新。
+
+在 DSH 的 cordis 预设会话中对 AI 说：
+
+> 请用 plugin_manager 安装插件，install_bundle 的 target 是 dsh-film-analysis
+
+首次安装会提示批准 	esseract.js 的构建脚本（内容仅为开源项目捐赠提示，不安装任何东西，可放心允许）；工具链（ffmpeg/ffprobe/中文 OCR）会随 npm 依赖自动下载。
+
+### 方式 A：下载 Release 里的离线包（推荐，Windows x64）
 
 1. 到 [Releases](../../releases) 下载 `dsh-film-analysis-win-x64-v0.2.0.zip`，解压到固定目录（装好后不要移动）：
    ```
