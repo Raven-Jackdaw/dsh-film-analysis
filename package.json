@@ -51,5 +51,13 @@
         "@deepseek-ai/dsh-client-ui-conversation"
       ]
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Raven-Jackdaw/dsh-film-analysis.git"
+  },
+  "homepage": "https://github.com/Raven-Jackdaw/dsh-film-analysis#readme",
+  "bugs": {
+    "url": "https://github.com/Raven-Jackdaw/dsh-film-analysis/issues"
   }
 }

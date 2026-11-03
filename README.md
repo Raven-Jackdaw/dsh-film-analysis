@@ -38,14 +38,14 @@
 
 在 DSH 的 cordis 预设会话中：
 
-> 请用 plugin_manager 安装插件，install_bundle 的 target 是 `github:<你的用户名>/dsh-film-analysis`
+> 请用 plugin_manager 安装插件，install_bundle 的 target 是 `github:Raven-Jackdaw/dsh-film-analysis`
 
 需要本机有 `git` 且能访问 GitHub；首次安装会从 npm 下载工具链（约 200MB，可能需要批准依赖构建脚本）。
 
 ### 方式 C：从源码构建
 
 ```powershell
-git clone https://github.com/<你的用户名>/dsh-film-analysis.git
+git clone https://github.com/Raven-Jackdaw/dsh-film-analysis.git
 cd dsh-film-analysis
 npm install --ignore-scripts            # 安装工具链依赖，约 200MB
 # 然后在 DSH cordis 会话中让 AI 安装当前目录绝对路径
