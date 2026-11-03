@@ -1483,9 +1483,19 @@ window.__ModuleLoader__.load({
         );
       }
       lines.push('');
-      lines.push('二、代表帧（请先调用 read_image 工具读取下面的图片再看画面）');
-      lines.push(`- 图片绝对路径：${shot.framePath}`);
-      if (shot.frameUrl) lines.push(`- 预览地址：${assetUrl(shot.frameUrl)}`);
+      lines.push('二、代表帧（请先调用 read_image 工具依次读取下面的图片再看画面）');
+      const frameList =
+        Array.isArray(shot.frames) && shot.frames.length > 0
+          ? shot.frames
+          : [{ time: shot.time, path: shot.framePath, url: shot.frameUrl }];
+      if (shot.longShot) {
+        lines.push(
+          `- 注意：该镜头为长镜头/段落（时长 ${formatSeconds(shot.duration)}），已抽取 ${frameList.length} 张代表帧，请按时间顺序逐张查看。`,
+        );
+      }
+      for (const frame of frameList) {
+        lines.push(`- [${formatSeconds(frame.time)}] ${frame.path}${frame.url ? `（预览：${assetUrl(frame.url)}）` : ''}`);
+      }
       lines.push('');
       lines.push('三、客观测量数据（插件自动提取）');
       lines.push('```json');
@@ -2604,7 +2614,7 @@ window.__ModuleLoader__.load({
                     h(
                       'div',
                       { className: 'fa-shot-sub' },
-                      `${formatSeconds(shot.duration)}${shot.metrics ? ` · ${asNumberOrDash(shot.metrics.meanLuma)}/255` : ''}`,
+                      `${shot.longShot ? `${t('shots.longShot', { count: asNumberOrDash(shot.frameCount) })} · ` : ''}${formatSeconds(shot.duration)}${shot.metrics ? ` · ${asNumberOrDash(shot.metrics.meanLuma)}/255` : ''}`,
                     ),
                   ),
                 ),
@@ -3724,7 +3734,8 @@ window.__ModuleLoader__.load({
       'shots.detecting': '正在检测镜头…',
       'shots.empty': '尚未检测镜头，点击「自动检测镜头」开始。',
       'shots.filled': '提示词已填入输入框，请发送',
-      'shots.hint': '自动检测镜头切换，为每个镜头抽代表帧并测量；点镜头即可让会话 AI 输出该镜头的八维分析。',
+      'shots.hint': '自动检测镜头切换，为每个镜头抽代表帧（长镜头自动抽多帧）并测量，自动裁掉黑边；点镜头即可让会话 AI 输出该镜头的八维分析。',
+      'shots.longShot': '长镜头 · {count} 帧',
       'shots.needVideo': '先在顶部导入 / 载入一个视频，再使用自动拉片。',
       'shots.redetect': '重新检测镜头',
       'shots.sent': '已发送给会话 AI，请切换到「对话」查看分析结果',
@@ -3995,7 +4006,8 @@ window.__ModuleLoader__.load({
       'shots.detecting': 'Detecting shots…',
       'shots.empty': 'No shots detected yet. Click "Detect shots" to start.',
       'shots.filled': 'Prompt filled into the composer; press send',
-      'shots.hint': 'Detect shot changes, extract a representative frame and measurements for each shot; click a shot to have the conversation AI analyze it.',
+      'shots.hint': 'Detect shot changes, extract representative frames (long takes get several) and measurements with automatic black-bar cropping; click a shot to have the conversation AI analyze it.',
+      'shots.longShot': 'Long take · {count} frames',
       'shots.needVideo': 'Import or load a video first, then use auto shot analysis.',
       'shots.redetect': 'Detect again',
       'shots.sent': 'Sent to the conversation AI — switch to Chat to read the analysis',
