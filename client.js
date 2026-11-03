@@ -2101,6 +2101,9 @@ window.__ModuleLoader__.load({
 .fa-deep-seg { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 6px 8px; }
 .fa-deep-seg > summary { cursor: pointer; font-size: 12px; font-weight: 600; }
 .fa-deep-seg[open] > summary { margin-bottom: 6px; }
+.fa-deep-chart { width: 100%; height: auto; display: block; }
+.fa-deep-bar { fill: var(--dsw-alias-brand-primary); opacity: 0.85; }
+.fa-deep-chart-label { fill: var(--dsw-alias-label-secondary); font-size: 9px; text-anchor: middle; }
 /* ---- AI 结果 Markdown ---- */
 .fa-md {
   max-height: 560px;
@@ -3269,6 +3272,131 @@ window.__ModuleLoader__.load({
       return t('deep.empty');
     }
 
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    /** 简易 Markdown → HTML（深度拉片报告导出用，不引入第三方库）。 */
+    function deepMarkdownToHtml(markdown) {
+      const lines = String(markdown || '').split(/\r?\n/);
+      const out = [];
+      let index = 0;
+      const inline = (text) =>
+        escapeHtml(text)
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/`([^`]+)`/g, '<code>$1</code>');
+      const isTableSep = (line) => /^\s*\|?[\s:|-]+\|?\s*$/.test(line) && line.includes('-');
+      while (index < lines.length) {
+        const line = lines[index];
+        const trimmed = line.trim();
+        if (trimmed === '') {
+          index += 1;
+          continue;
+        }
+        if (trimmed.startsWith('```')) {
+          const code = [];
+          index += 1;
+          while (index < lines.length && !lines[index].trim().startsWith('```')) {
+            code.push(lines[index]);
+            index += 1;
+          }
+          index += 1;
+          out.push(`<pre>${escapeHtml(code.join('\n'))}</pre>`);
+          continue;
+        }
+        const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+        if (heading) {
+          const level = Math.min(6, heading[1].length + 1);
+          out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+          index += 1;
+          continue;
+        }
+        if (trimmed.startsWith('|') && index + 1 < lines.length && isTableSep(lines[index + 1])) {
+          const split = (row) =>
+            row
+              .trim()
+              .replace(/^\|/, '')
+              .replace(/\|$/, '')
+              .split('|')
+              .map((cell) => cell.trim());
+          const head = split(trimmed);
+          index += 2;
+          const rows = [];
+          while (index < lines.length && lines[index].trim().startsWith('|')) {
+            rows.push(split(lines[index]));
+            index += 1;
+          }
+          out.push(
+            `<table><thead><tr>${head.map((cell) => `<th>${inline(cell)}</th>`).join('')}</tr></thead><tbody>${rows
+              .map((row) => `<tr>${row.map((cell) => `<td>${inline(cell)}</td>`).join('')}</tr>`)
+              .join('')}</tbody></table>`,
+          );
+          continue;
+        }
+        if (/^\s*[-*]\s+/.test(trimmed)) {
+          const items = [];
+          while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
+            items.push(lines[index].replace(/^\s*[-*]\s+/, ''));
+            index += 1;
+          }
+          out.push(`<ul>${items.map((item) => `<li>${inline(item)}</li>`).join('')}</ul>`);
+          continue;
+        }
+        if (/^\s*\d+[.)]\s+/.test(trimmed)) {
+          const items = [];
+          while (index < lines.length && /^\s*\d+[.)]\s+/.test(lines[index])) {
+            items.push(lines[index].replace(/^\s*\d+[.)]\s+/, ''));
+            index += 1;
+          }
+          out.push(`<ol>${items.map((item) => `<li>${inline(item)}</li>`).join('')}</ol>`);
+          continue;
+        }
+        const paragraph = [];
+        while (
+          index < lines.length &&
+          lines[index].trim() !== '' &&
+          !/^(#{1,6}\s|```|\||\s*[-*]\s+|\s*\d+[.)]\s+)/.test(lines[index])
+        ) {
+          paragraph.push(lines[index].trim());
+          index += 1;
+        }
+        if (paragraph.length === 0) {
+          paragraph.push(trimmed);
+          index += 1;
+        }
+        out.push(`<p>${inline(paragraph.join(' '))}</p>`);
+      }
+      return out.join('\n');
+    }
+
+    function DeepRhythmChart(props) {
+      const shots = Array.isArray(props.shots) ? props.shots : [];
+      if (shots.length === 0) return null;
+      const width = 560;
+      const height = 96;
+      const pad = 8;
+      const gap = 3;
+      const barWidth = Math.max(3, (width - pad * 2 - gap * (shots.length - 1)) / shots.length);
+      const maxDuration = Math.max(...shots.map((shot) => Number(shot.duration) || 0), 1);
+      return h(
+        'svg',
+        { viewBox: `0 0 ${width} ${height}`, className: 'fa-deep-chart', role: 'img', 'aria-label': '镜头时长曲线' },
+        shots.map((shot, index) => {
+          const barHeight = Math.max(3, ((Number(shot.duration) || 0) / maxDuration) * (height - 30));
+          const x = pad + index * (barWidth + gap);
+          return h(
+            'g',
+            { key: index },
+            h('rect', { x, y: height - 20 - barHeight, width: barWidth, height: barHeight, rx: 2, className: 'fa-deep-bar' }),
+            h('text', { x: x + barWidth / 2, y: height - 6, className: 'fa-deep-chart-label' }, String(shot.index)),
+          );
+        }),
+      );
+    }
     function DeepSection(props) {
       const t = props.t;
       const state = props.state;
@@ -3401,6 +3529,14 @@ window.__ModuleLoader__.load({
               ? h('div', { className: 'fa-hint' }, `${t('deep.startedAt')}：${new Date(job.createdAt).toLocaleString()}`)
               : null,
             job && job.error ? h('div', { className: 'fa-hint fa-ai-warn' }, job.error) : null,
+            result && Array.isArray(result.shots) && result.shots.length > 0
+              ? h(
+                  'div',
+                  { className: 'fa-stack' },
+                  h('span', { className: 'fa-label' }, t('deep.chart')),
+                  h(DeepRhythmChart, { shots: result.shots }),
+                )
+              : null,
             result
               ? h(
                   'div',
@@ -3412,6 +3548,47 @@ window.__ModuleLoader__.load({
                     { className: 'fa-row' },
                     h(FaButton, { label: t('deep.copyFinal'), small: true, onClick: () => void copyWithFeedback(result.finalText || '') }),
                     h(FaButton, { label: t('deep.copyAll'), small: true, variant: 'ghost', onClick: () => void copyWithFeedback(job.markdown || result.finalText || '') }),
+                    h(FaButton, {
+                      label: t('deep.exportMd'),
+                      small: true,
+                      variant: 'ghost',
+                      onClick: () => downloadText(`deep-analysis-${fileStamp()}.md`, job.markdown || result.finalText || '', 'text/markdown;charset=utf-8'),
+                    }),
+                    h(FaButton, {
+                      label: t('deep.exportJson'),
+                      small: true,
+                      variant: 'ghost',
+                      onClick: () =>
+                        downloadText(
+                          `deep-analysis-${fileStamp()}.json`,
+                          JSON.stringify(
+                            {
+                              meta: { jobId: job.id, createdAt: job.createdAt, tier: job.tier, videoPath: job.videoPath },
+                              result: job.result,
+                              segments: job.segments,
+                            },
+                            null,
+                            2,
+                          ),
+                          'application/json;charset=utf-8',
+                        ),
+                    }),
+                    h(FaButton, {
+                      label: t('deep.exportHtml'),
+                      small: true,
+                      variant: 'ghost',
+                      onClick: () => {
+                        const bodyHtml = deepMarkdownToHtml(result.finalText || '');
+                        const segmentsHtml = segments
+                          .map(
+                            (segment) =>
+                              `<hr><h2>第 ${segment.index} 段（${formatSeconds(segment.start)}–${formatSeconds(segment.end)}）</h2>${deepMarkdownToHtml(segment.markdown || '')}`,
+                          )
+                          .join('\n');
+                        const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>深度拉片报告</title><style>body{font-family:system-ui,"Microsoft YaHei",sans-serif;line-height:1.6;max-width:1000px;margin:24px auto;padding:0 16px;color:#222}h2{border-bottom:2px solid #eee;padding-bottom:4px}table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f5f5f5}pre{background:#f6f8fa;padding:10px;overflow:auto;border-radius:6px}code{background:#f0f0f0;padding:1px 4px;border-radius:4px}</style></head><body><h1>深度拉片报告</h1>${bodyHtml}${segmentsHtml}</body></html>`;
+                        downloadText(`deep-analysis-${fileStamp()}.html`, html, 'text/html;charset=utf-8');
+                      },
+                    }),
                   ),
                 )
               : null,
@@ -4934,6 +5111,10 @@ window.__ModuleLoader__.load({
       'deep.copyFinal': '复制汇总',
       'deep.copyAll': '复制全文',
       'deep.startedAt': '开始时间',
+      'deep.chart': '镜头时长曲线',
+      'deep.exportMd': '导出 Markdown',
+      'deep.exportJson': '导出 JSON',
+      'deep.exportHtml': '导出 HTML 拉片表',
       'shots.unit': '个镜头',
       'form.basis': '画面依据',
       'form.basisPlaceholder': '画面中哪些证据支撑这个判断（构图、光影、色彩、人物位置…）',
@@ -5295,6 +5476,10 @@ window.__ModuleLoader__.load({
       'deep.copyFinal': 'Copy report',
       'deep.copyAll': 'Copy everything',
       'deep.startedAt': 'Started at',
+      'deep.chart': 'Shot-duration curve',
+      'deep.exportMd': 'Export Markdown',
+      'deep.exportJson': 'Export JSON',
+      'deep.exportHtml': 'Export HTML shot table',
       'shots.unit': 'shots',
       'form.basis': 'Visual evidence',
       'form.basisPlaceholder': 'Which visual evidence supports this judgment (composition, light, color, subject placement…)',
