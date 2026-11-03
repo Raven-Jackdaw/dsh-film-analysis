@@ -4,6 +4,8 @@
 
 面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI 的影视/视听语言分析插件：导入图片或视频，**客观测量画面指标**，按影视语言框架完成 **8 维分析**，在画面上**标注**，生成**结构化提示词**，并导出**分析报告与分镜/镜头表**。工具链（ffmpeg、ffprobe、中文 OCR）随 DSH 插件一起安装，无需另装 Python 或 ffmpeg。
 
+> **语言 / Language**：面板界面为中英双语（跟随 DSH 语言设置）；**AI 分析输出、内置术语库与生成的提示词为简体中文**。UI is bilingual (zh/en); AI analysis output, the built-in term library and generated prompts are in **Simplified Chinese**.
+
 ![demo](docs/demo.png)
 
 ## 功能
@@ -81,4 +83,4 @@ docs/                 # README 图片与知识数据说明
 
 ## English
 
-A DeepSeek Harness Web UI plugin for film / audiovisual-language analysis: measure frame metrics, fill an 8-dimension analysis form, annotate frames, generate structured prompts for the conversation agent, and export Markdown reports and shot-list CSV. It also detects shots and produces one-click shot analysis and full-video shot-by-shot reports inside the panel (clip-level motion / brightness / audio + multiple frames, with token/cost display). ffmpeg/ffprobe/Chinese OCR are installed as npm dependencies. Install the plugin bundle via `plugin_manager` in a Cordis-preset session, then refresh the Web UI. Requires DSH `>=0.2.1-rc.2 <0.3.0`; Windows x64 tested. The bundled knowledge data is generic terminology only — no textbook excerpts. Code is MIT-licensed; runtime dependencies keep their own licenses.
+A DeepSeek Harness Web UI plugin for film / audiovisual-language analysis: measure frame metrics, fill an 8-dimension analysis form, annotate frames, generate structured prompts for the conversation agent, and export Markdown reports and shot-list CSV. It also detects shots and produces one-click shot analysis and full-video shot-by-shot reports inside the panel (clip-level motion / brightness / audio + multiple frames, with token/cost display). ffmpeg/ffprobe/Chinese OCR are installed as npm dependencies. Install the plugin bundle via `plugin_manager` in a Cordis-preset session, then refresh the Web UI. Requires DSH `>=0.2.1-rc.2 <0.3.0`; Windows x64 tested. The bundled knowledge data is generic terminology only — no textbook excerpts. Code is MIT-licensed; runtime dependencies keep their own licenses. The panel UI is bilingual (Chinese/English); AI-generated analysis, the built-in terminology library and generated prompts are in Simplified Chinese.

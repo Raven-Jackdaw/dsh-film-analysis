@@ -1,7 +1,7 @@
 {
   "name": "dsh-film-analysis",
   "version": "0.1.0",
-  "description": "DSH Web UI 插件：影视画面分析器——画面测量、8 维视听语言分析、画面标注、提示词生成与分镜表导出（自带 ffmpeg/ffprobe/中文 OCR 工具链）",
+  "description": "DSH Web UI plugin for film & audiovisual-language analysis: frame metrics, 8-dimension forms, auto shot detection with AI shot breakdowns, annotation, reports and shot lists. Bundled ffmpeg + offline Chinese OCR. UI: zh/English; analysis output in Simplified Chinese.",
   "type": "module",
   "license": "MIT",
   "keywords": [
