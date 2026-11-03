@@ -1,0 +1,4 @@
+- insert:
+    - id: film-analysis
+      name: 'dsh-film-analysis'
+      config: {}

@@ -1,0 +1,12 @@
+# 依赖与构建产物（安装/打包生成，不应提交）
+node_modules/
+dist/
+*.zip
+*.log
+.DS_Store
+Thumbs.db
+
+# 本地运行数据
+.film-analysis/
+_work/
+*.tmp

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Film Frame Analyzer",
+    "description": "Import stills or videos, measure frame metrics, complete an audiovisual-language analysis with the two textbooks' frameworks, annotate frames, and export an analysis report plus a shot list. Bundles its own ffmpeg, image-processing, and Chinese OCR toolchain."
+  }
+}
