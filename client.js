@@ -1967,7 +1967,8 @@ window.__ModuleLoader__.load({
   min-height: 0;
   overflow: auto;
   padding: 20px clamp(14px, 3.5vw, 40px) 48px;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
+  scrollbar-gutter: stable;
 }
 .fa-view-head { max-width: 1040px; margin: 0 auto 14px; }
 .fa-view-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -2011,8 +2012,9 @@ window.__ModuleLoader__.load({
 }
 .fa-dock-body {
   max-height: 60vh;
-  overflow: auto;
-  overscroll-behavior: contain;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: auto;
   padding: 10px 12px 16px;
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
@@ -2099,8 +2101,8 @@ window.__ModuleLoader__.load({
 .fa-ai-text {
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 420px;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   margin: 0;
   font-family: inherit;
   font-size: 12px;
@@ -2118,8 +2120,8 @@ window.__ModuleLoader__.load({
 .fa-deep-chart-label { fill: var(--dsw-alias-label-secondary); font-size: 9px; text-anchor: middle; }
 /* ---- AI 结果 Markdown ---- */
 .fa-md {
-  max-height: 560px;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   font-size: 12px;
   line-height: 1.6;
   color: var(--dsw-alias-label-primary);
@@ -2130,8 +2132,8 @@ window.__ModuleLoader__.load({
 .fa-md-list { margin: 4px 0 4px 18px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .fa-md-quote { margin: 6px 0; padding: 2px 0 2px 8px; border-left: 3px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
 .fa-md-inline { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; padding: 0 3px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); }
-.fa-md-code { margin: 6px 0; padding: 8px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; }
-.fa-md-tablewrap { overflow: auto; margin: 6px 0; }
+.fa-md-code { margin: 6px 0; padding: 8px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; overflow-x: auto; overflow-y: visible; max-height: none; }
+.fa-md-tablewrap { overflow-x: auto; overflow-y: visible; margin: 6px 0; }
 .fa-md-table { border-collapse: collapse; min-width: 100%; font-size: 11px; }
 .fa-md-table th, .fa-md-table td { border: 1px solid var(--dsw-alias-border-l1); padding: 3px 6px; text-align: left; vertical-align: top; }
 .fa-md-table th { background: var(--dsw-alias-bg-layer-2); font-weight: 600; white-space: nowrap; }
@@ -5129,6 +5131,8 @@ window.__ModuleLoader__.load({
       'deep.copyFinal': '复制汇总',
       'deep.copyAll': '复制全文',
       'deep.startedAt': '开始时间',
+      'deep.resume': '继续任务',
+      'deep.resumed': '任务已恢复',
       'deep.chart': '镜头时长曲线',
       'deep.exportMd': '导出 Markdown',
       'deep.exportJson': '导出 JSON',
@@ -5494,6 +5498,8 @@ window.__ModuleLoader__.load({
       'deep.copyFinal': 'Copy report',
       'deep.copyAll': 'Copy everything',
       'deep.startedAt': 'Started at',
+      'deep.resume': 'Resume job',
+      'deep.resumed': 'Job resumed',
       'deep.chart': 'Shot-duration curve',
       'deep.exportMd': 'Export Markdown',
       'deep.exportJson': 'Export JSON',
