@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 影视画面分析器 · Client 端（DSH Web UI 插件，单文件纯 JS）
  *
  * 结构（自上而下）：
@@ -1135,6 +1135,7 @@ window.__ModuleLoader__.load({
               dimensions,
               framework: isRecord(record.framework) ? record.framework : null,
               films: Array.isArray(record.films) ? record.films : [],
+              extraTopics: Array.isArray(record.extraTopics) ? record.extraTopics : [],
             },
             loading: false,
             error: '',
@@ -1519,7 +1520,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 检测镜头（自动拉片），结果存进 state.video.autoShots。 */
-    async function detectAutoShots() {
+    async function detectAutoShots(threshold = 0.32) {
       const state = store.getSnapshot();
       if (!state.video || !state.video.path) {
         flash('warn', T('shots.needVideo'));
@@ -1527,7 +1528,7 @@ window.__ModuleLoader__.load({
       }
       await runTask('shots', async () => {
         flash('info', T('shots.detecting'));
-        const data = await invoke('autoShots', { videoPath: state.video.path, maxShots: 12 });
+        const data = await invoke('autoShots', { videoPath: state.video.path, maxShots: 12, threshold });
         store.set((previous) => ({ ...previous, video: { ...previous.video, autoShots: data }, videoReport: null }));
         flash('success', `${T('shots.detected')}：${asNumberOrDash(data.returned)} / ${asNumberOrDash(data.totalShots)}`);
       });
@@ -1550,7 +1551,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 一键 AI 分析：Host 直接调用会话默认模型，结果写回面板（不经过对话）。 */
-    async function analyzeShotAI(shot, resultKey) {
+    async function analyzeShotAI(shot, resultKey, detail = 'detailed') {
       const state = store.getSnapshot();
       if (!state.video || !state.video.path) {
         flash('warn', T('shots.needVideo'));
@@ -1571,6 +1572,7 @@ window.__ModuleLoader__.load({
           totalShots: state.video.autoShots ? state.video.autoShots.totalShots : 0,
           frames: shot.frames || [{ time: shot.time, path: shot.framePath, url: shot.frameUrl }],
           metrics: shot.metrics || null,
+          detail,
           prevShot: prevShot ? { start: prevShot.start, end: prevShot.end } : null,
           nextShot: nextShot ? { start: nextShot.start, end: nextShot.end } : null,
         });
@@ -1584,7 +1586,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 整片拉片报告：一次模型调用覆盖全部镜头。 */
-    async function analyzeVideoReport() {
+    async function analyzeVideoReport(detail = 'detailed') {
       const state = store.getSnapshot();
       if (!state.video || !state.video.path || !state.video.autoShots) {
         flash('warn', T('shots.needVideo'));
@@ -1595,6 +1597,7 @@ window.__ModuleLoader__.load({
         const data = state.video.autoShots;
         const result = await invoke('aiAnalyzeVideoReport', {
           videoPath: state.video.path,
+          detail,
           shots: data.shots.map((shot) => ({
             index: shot.index,
             start: shot.start,
@@ -1934,7 +1937,36 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-primary);
 }
 .fa-ai-warn { color: var(--dsw-alias-state-warn-primary); }
+/* ---- AI 结果 Markdown ---- */
+.fa-md {
+  max-height: 560px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--dsw-alias-label-primary);
+}
+.fa-md > *:first-child { margin-top: 0; }
+.fa-md-head { font-size: 13px; margin: 10px 0 4px; font-weight: 700; }
+.fa-md-p { margin: 4px 0; }
+.fa-md-list { margin: 4px 0 4px 18px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.fa-md-quote { margin: 6px 0; padding: 2px 0 2px 8px; border-left: 3px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+.fa-md-inline { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; padding: 0 3px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); }
+.fa-md-code { margin: 6px 0; padding: 8px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; }
+.fa-md-tablewrap { overflow: auto; margin: 6px 0; }
+.fa-md-table { border-collapse: collapse; min-width: 100%; font-size: 11px; }
+.fa-md-table th, .fa-md-table td { border: 1px solid var(--dsw-alias-border-l1); padding: 3px 6px; text-align: left; vertical-align: top; }
+.fa-md-table th { background: var(--dsw-alias-bg-layer-2); font-weight: 600; white-space: nowrap; }
+/* ---- 知识点速查 ---- */
+.fa-kb-group { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.fa-kb-title { font-weight: 600; font-size: 12px; }
+.fa-kb-term { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; border-bottom: 1px dashed var(--dsw-alias-border-l1); }
+.fa-kb-term:last-child { border-bottom: none; }
+.fa-kb-term-name { font-weight: 600; font-size: 12px; }
+.fa-kb-term-def { font-size: 12px; color: var(--dsw-alias-label-primary); }
+.fa-kb-term-cite { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .fa-shot-card-busy { opacity: 0.65; cursor: progress; }
+.fa-shot-options { align-items: center; gap: 8px; flex-wrap: wrap; }
+.fa-range { width: 160px; accent-color: var(--dsw-alias-brand-primary); }
 .fa-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; word-break: break-all; }
 .fa-divider { height: 1px; background: var(--dsw-alias-border-l1); margin: 2px 0; }
 /* ---- 按钮 ---- */
@@ -2322,6 +2354,246 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // ---------------------------------------------------------------------
+    // 轻量 Markdown 渲染（标题/粗体/行内代码/列表/表格/代码块），用于 AI 分析结果。
+    // 只生成 React 元素与文本节点，不使用 innerHTML。
+    // ---------------------------------------------------------------------
+
+    function renderInline(text) {
+      const nodes = [];
+      const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+      let last = 0;
+      let match = pattern.exec(text);
+      while (match !== null) {
+        if (match.index > last) nodes.push(text.slice(last, match.index));
+        const token = match[0];
+        if (token.startsWith('**')) nodes.push(h('strong', { key: `b${nodes.length}` }, token.slice(2, -2)));
+        else nodes.push(h('code', { key: `c${nodes.length}`, className: 'fa-md-inline' }, token.slice(1, -1)));
+        last = match.index + token.length;
+        match = pattern.exec(text);
+      }
+      if (last < text.length) nodes.push(text.slice(last));
+      return nodes;
+    }
+
+    function isTableSeparator(line) {
+      return /^\s*\|?[\s:|-]+\|?\s*$/.test(line) && line.includes('-');
+    }
+
+    function renderMarkdownBlocks(text) {
+      const lines = String(text || '').split(/\r?\n/);
+      const blocks = [];
+      let index = 0;
+      const special = (line) =>
+        /^\s*(#{1,4})\s+/.test(line) ||
+        line.trim().startsWith('```') ||
+        line.trim().startsWith('|') ||
+        /^\s*[-*]\s+/.test(line) ||
+        /^\s*\d+[.)]\s+/.test(line) ||
+        /^\s*>\s?/.test(line);
+
+      while (index < lines.length) {
+        const line = lines[index];
+        const trimmed = line.trim();
+        if (trimmed === '') {
+          index += 1;
+          continue;
+        }
+        if (trimmed.startsWith('```')) {
+          const code = [];
+          index += 1;
+          while (index < lines.length && !lines[index].trim().startsWith('```')) {
+            code.push(lines[index]);
+            index += 1;
+          }
+          index += 1;
+          blocks.push(h('pre', { key: `code${blocks.length}`, className: 'fa-md-code' }, code.join('\n')));
+          continue;
+        }
+        const heading = /^(#{1,4})\s+(.*)$/.exec(trimmed);
+        if (heading) {
+          blocks.push(
+            h(
+              heading[1].length <= 2 ? 'h4' : 'h5',
+              { key: `h${blocks.length}`, className: 'fa-md-head' },
+              renderInline(heading[2]),
+            ),
+          );
+          index += 1;
+          continue;
+        }
+        if (trimmed.startsWith('|') && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
+          const splitRow = (row) =>
+            row
+              .trim()
+              .replace(/^\|/, '')
+              .replace(/\|$/, '')
+              .split('|')
+              .map((cell) => cell.trim());
+          const headerCells = splitRow(trimmed);
+          index += 2;
+          const rows = [];
+          while (index < lines.length && lines[index].trim().startsWith('|')) {
+            rows.push(splitRow(lines[index]));
+            index += 1;
+          }
+          blocks.push(
+            h(
+              'div',
+              { key: `t${blocks.length}`, className: 'fa-md-tablewrap' },
+              h(
+                'table',
+                { className: 'fa-md-table' },
+                h('thead', null, h('tr', null, headerCells.map((cell, cellIndex) => h('th', { key: cellIndex }, renderInline(cell))))),
+                h(
+                  'tbody',
+                  null,
+                  rows.map((row, rowIndex) =>
+                    h(
+                      'tr',
+                      { key: rowIndex },
+                      row.map((cell, cellIndex) => h('td', { key: cellIndex }, renderInline(cell))),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          continue;
+        }
+        if (/^\s*[-*]\s+/.test(trimmed)) {
+          const items = [];
+          while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
+            items.push(lines[index].replace(/^\s*[-*]\s+/, '').trim());
+            index += 1;
+          }
+          blocks.push(
+            h(
+              'ul',
+              { key: `ul${blocks.length}`, className: 'fa-md-list' },
+              items.map((item, itemIndex) => h('li', { key: itemIndex }, renderInline(item))),
+            ),
+          );
+          continue;
+        }
+        if (/^\s*\d+[.)]\s+/.test(trimmed)) {
+          const items = [];
+          while (index < lines.length && /^\s*\d+[.)]\s+/.test(lines[index])) {
+            items.push(lines[index].replace(/^\s*\d+[.)]\s+/, '').trim());
+            index += 1;
+          }
+          blocks.push(
+            h(
+              'ol',
+              { key: `ol${blocks.length}`, className: 'fa-md-list' },
+              items.map((item, itemIndex) => h('li', { key: itemIndex }, renderInline(item))),
+            ),
+          );
+          continue;
+        }
+        if (/^\s*>\s?/.test(trimmed)) {
+          const quote = [];
+          while (index < lines.length && /^\s*>\s?/.test(lines[index])) {
+            quote.push(lines[index].replace(/^\s*>\s?/, '').trim());
+            index += 1;
+          }
+          blocks.push(h('p', { key: `q${blocks.length}`, className: 'fa-md-quote' }, renderInline(quote.join(' '))));
+          continue;
+        }
+        const paragraph = [];
+        while (index < lines.length && lines[index].trim() !== '' && !special(lines[index])) {
+          paragraph.push(lines[index].trim());
+          index += 1;
+        }
+        if (paragraph.length === 0) {
+          paragraph.push(trimmed);
+          index += 1;
+        }
+        blocks.push(h('p', { key: `p${blocks.length}`, className: 'fa-md-p' }, renderInline(paragraph.join(' '))));
+      }
+      return blocks;
+    }
+
+    function FaMarkdown(props) {
+      return h('div', { className: 'fa-md' }, renderMarkdownBlocks(props.text));
+    }
+
+    // ---------------------------------------------------------------------
+    // 区块：教材知识点速查（来自开发版知识库的 EXTRA_TOPICS）
+    // ---------------------------------------------------------------------
+
+    function KnowledgeSection(props) {
+      const t = props.t;
+      const state = props.state;
+      const [query, setQuery] = useState('');
+      const knowledge = state.knowledge || {};
+      const data = knowledge.data || null;
+      const dims = data && Array.isArray(data.dimensions) ? data.dimensions : [];
+      const films = data && Array.isArray(data.films) ? data.films : [];
+      const extraTopics = data && Array.isArray(data.extraTopics) ? data.extraTopics : [];
+      const termCount = dims.reduce((sum, dim) => sum + (Array.isArray(dim.terms) ? dim.terms.length : 0), 0);
+      const summary = data ? `${termCount} ${t('knowledge.termsUnit')}${films.length ? ` · ${films.length} ${t('knowledge.filmsUnit')}` : ''}` : '';
+      const keyword = query.trim().toLowerCase();
+      const groups = extraTopics
+        .map((group) => ({
+          section: asString(group.section),
+          terms: (Array.isArray(group.terms) ? group.terms : []).filter((term) => {
+            if (!keyword) return true;
+            return `${asString(term.term)} ${asString(term.definition)}`.toLowerCase().includes(keyword);
+          }),
+        }))
+        .filter((group) => group.terms.length > 0);
+
+      let body;
+      if (!data) {
+        body = knowledge.error
+          ? h(
+              'div',
+              { className: 'fa-stack' },
+              h('div', { className: 'fa-hint fa-ai-warn' }, knowledge.error),
+              h(FaButton, { label: t('common.retry'), small: true, onClick: () => ensureKnowledge(true) }),
+            )
+          : h('div', { className: 'fa-hint' }, knowledge.loading ? t('knowledge.loading') : t('knowledge.empty'));
+      } else if (extraTopics.length === 0) {
+        body = h(FaEmpty, { text: t('knowledge.noExtra') });
+      } else {
+        body = h(
+          'div',
+          { className: 'fa-stack' },
+          h('div', { className: 'fa-hint' }, t('knowledge.hint')),
+          h('input', {
+            className: 'fa-input',
+            type: 'text',
+            value: query,
+            placeholder: t('knowledge.search'),
+            'aria-label': t('knowledge.search'),
+            onChange: (event) => setQuery(event.target.value),
+          }),
+          groups.length === 0
+            ? h(FaEmpty, { text: t('knowledge.filterEmpty') })
+            : groups.map((group) =>
+                h(
+                  'div',
+                  { key: group.section, className: 'fa-kb-group' },
+                  h('div', { className: 'fa-kb-title' }, `${group.section}（${group.terms.length}）`),
+                  group.terms.map((term, termIndex) =>
+                    h(
+                      'div',
+                      { key: `${group.section}-${termIndex}`, className: 'fa-kb-term' },
+                      h('div', { className: 'fa-kb-term-name' }, asString(term.term)),
+                      h('div', { className: 'fa-kb-term-def' }, asString(term.definition)),
+                      asString(term.cite)
+                        ? h('div', { className: 'fa-kb-term-cite' }, asString(term.cite))
+                        : null,
+                    ),
+                  ),
+                ),
+              ),
+        );
+      }
+      return h(FaSection, { t, title: t('knowledge.title'), summary }, body);
+    }
+
     function FaSection(props) {
       const [open, setOpen] = useState(Boolean(props.defaultOpen));
       return h(
@@ -2657,6 +2929,8 @@ window.__ModuleLoader__.load({
       const [selected, setSelected] = useState(-1);
       const [selectedKey, setSelectedKey] = useState('');
       const busy = Boolean(state.busy.shots);
+      const [threshold, setThreshold] = useState(0.32);
+      const [detail, setDetail] = useState('detailed');
       const { aiResults = {} } = state;
       const selectedShot = data && selected > 0 ? data.shots.find((shot) => shot.index === selected) || null : null;
       const aiKey = selectedKey || (selected > 0 ? String(selected) : '');
@@ -2675,20 +2949,55 @@ window.__ModuleLoader__.load({
           h('div', { className: 'fa-hint' }, t('shots.hint')),
           h(
             'div',
+            { className: 'fa-row fa-shot-options' },
+            h('span', { className: 'fa-label' }, t('shots.threshold')),
+            h('input', {
+              className: 'fa-range',
+              type: 'range',
+              min: 0.1,
+              max: 0.6,
+              step: 0.02,
+              value: threshold,
+              'aria-label': t('shots.threshold'),
+              onChange: (event) => setThreshold(Number(event.target.value)),
+            }),
+            h('span', { className: 'fa-hint' }, threshold.toFixed(2)),
+            h('span', { className: 'fa-hint' }, t('shots.thresholdHint')),
+          ),
+          h(
+            'div',
+            { className: 'fa-row fa-shot-options' },
+            h('span', { className: 'fa-label' }, t('shots.detail')),
+            h(FaButton, {
+              label: t('shots.detailFast'),
+              small: true,
+              variant: detail === 'fast' ? 'primary' : 'ghost',
+              onClick: () => setDetail('fast'),
+            }),
+            h(FaButton, {
+              label: t('shots.detailDetailed'),
+              small: true,
+              variant: detail === 'detailed' ? 'primary' : 'ghost',
+              onClick: () => setDetail('detailed'),
+            }),
+            h('span', { className: 'fa-hint' }, t('shots.detailHint')),
+          ),
+          h(
+            'div',
             { className: 'fa-row' },
             h(FaButton, {
               label: busy ? t('shots.detecting') : data ? t('shots.redetect') : t('shots.detect'),
               variant: 'primary',
               busy,
               disabled: busy,
-              onClick: () => detectAutoShots(),
+              onClick: () => detectAutoShots(threshold),
             }),
             data
               ? h(FaButton, {
                   label: state.busy['video-report'] ? t('shots.videoReportBusy') : t('shots.videoReport'),
                   busy: Boolean(state.busy['video-report']),
                   disabled: busy || Boolean(state.busy['video-report']),
-                  onClick: () => analyzeVideoReport(),
+                  onClick: () => analyzeVideoReport(detail),
                 })
               : null,
             data ? h(FaBadge, { text: `${asNumberOrDash(data.totalShots)} ${t('shots.unit')}`, kind: 'ok' }) : null,
@@ -2708,7 +3017,7 @@ window.__ModuleLoader__.load({
                       onClick: () => {
                         setSelected(shot.index);
                         setSelectedKey(String(shot.index));
-                        analyzeShotAI(shot, String(shot.index));
+                        analyzeShotAI(shot, String(shot.index), detail);
                       },
                     },
                     h('img', { className: 'fa-shot-thumb', src: assetUrl(shot.frameUrl), alt: '' }),
@@ -2807,6 +3116,7 @@ window.__ModuleLoader__.load({
                                 metrics: selectedShot.metrics,
                               },
                               segmentKey,
+                              detail,
                             );
                           },
                         });
@@ -2814,7 +3124,7 @@ window.__ModuleLoader__.load({
                     )
                   : null,
                 ai && ai.truncated ? h('div', { className: 'fa-hint fa-ai-warn' }, t('shots.aiTruncated')) : null,
-                ai ? h('pre', { className: 'fa-ai-text' }, ai.text) : aiBusy ? null : h(FaEmpty, { text: t('shots.aiEmpty') }),
+                ai ? h(FaMarkdown, { text: ai.text }) : aiBusy ? null : h(FaEmpty, { text: t('shots.aiEmpty') }),
                 ai
                   ? h(
                       'div',
@@ -2839,6 +3149,7 @@ window.__ModuleLoader__.load({
                               metrics: selectedShot.metrics,
                             },
                             aiKey,
+                            detail,
                           ),
                       }),
                       h(FaButton, {
@@ -2873,7 +3184,7 @@ window.__ModuleLoader__.load({
                     : null,
                 ),
                 report.truncated ? h('div', { className: 'fa-hint fa-ai-warn' }, t('shots.aiTruncated')) : null,
-                h('pre', { className: 'fa-ai-text' }, report.text),
+                h(FaMarkdown, { text: report.text }),
                 h(
                   'div',
                   { className: 'fa-row' },
@@ -3835,6 +4146,7 @@ window.__ModuleLoader__.load({
         h(AutoShotsSection, { t, state, inputActions: props.inputActions }),
         h(MeasureSection, { t, state }),
         h(AnalysisFormSection, { t, state }),
+        h(KnowledgeSection, { t, state }),
         h(AnnotateSection, { t, state }),
         h(PromptSection, { t, state, inputActions: props.inputActions, containerRef: panelRef }),
         h(ExportSection, { t, state }),
@@ -4034,6 +4346,21 @@ window.__ModuleLoader__.load({
       'shots.summaryEmpty': '未检测',
       'shots.title': '自动拉片 · 点击镜头让 AI 分析',
       'shots.truncated': '镜头较多，已等距抽样展示；可调参数或分段检测。',
+      'knowledge.title': '教材知识点速查',
+      'knowledge.loading': '正在加载知识库…',
+      'knowledge.empty': '知识库加载中或不可用。',
+      'knowledge.noExtra': '当前知识库没有额外知识点（通用版不含教材知识点）。',
+      'knowledge.hint': '来自学习笔记的章节知识点（总论 / 剪辑与蒙太奇 / 影片分析 / 新媒介等），可按关键词过滤。',
+      'knowledge.search': '搜索术语或定义…',
+      'knowledge.filterEmpty': '没有匹配的知识点。',
+      'knowledge.termsUnit': '术语',
+      'knowledge.filmsUnit': '片例',
+      'shots.threshold': '检测灵敏度',
+      'shots.thresholdHint': '数值越低越容易检出切点（0.10–0.60，默认 0.32）。',
+      'shots.detail': '分析详细度',
+      'shots.detailFast': '快速',
+      'shots.detailDetailed': '详细',
+      'shots.detailHint': '快速=少帧短分析（约 20–40 秒）；详细=多帧长分析（约 1–2 分钟）。',
       'shots.unit': '个镜头',
       'form.basis': '画面依据',
       'form.basisPlaceholder': '画面中哪些证据支撑这个判断（构图、光影、色彩、人物位置…）',
@@ -4331,6 +4658,21 @@ window.__ModuleLoader__.load({
       'shots.summaryEmpty': 'Not detected',
       'shots.title': 'Auto shot analysis · click a shot for AI analysis',
       'shots.truncated': 'Too many shots; evenly sampled. Adjust parameters or analyze by segment.',
+      'knowledge.title': 'Textbook knowledge lookup',
+      'knowledge.loading': 'Loading knowledge…',
+      'knowledge.empty': 'Knowledge base is loading or unavailable.',
+      'knowledge.noExtra': 'No extra knowledge points in this knowledge base (the generic build has no textbook data).',
+      'knowledge.hint': 'Chapter knowledge points from study notes (overview / editing & montage / film analysis / new media). Filter by keyword.',
+      'knowledge.search': 'Search terms or definitions…',
+      'knowledge.filterEmpty': 'No matching knowledge points.',
+      'knowledge.termsUnit': 'terms',
+      'knowledge.filmsUnit': 'film examples',
+      'shots.threshold': 'Detection sensitivity',
+      'shots.thresholdHint': 'Lower values detect more cut points (0.10–0.60, default 0.32).',
+      'shots.detail': 'Analysis detail',
+      'shots.detailFast': 'Fast',
+      'shots.detailDetailed': 'Detailed',
+      'shots.detailHint': 'Fast = fewer frames & shorter text (~20–40s); Detailed = more frames & longer text (~1–2 min).',
       'shots.unit': 'shots',
       'form.basis': 'Visual evidence',
       'form.basisPlaceholder': 'Which visual evidence supports this judgment (composition, light, color, subject placement…)',
