@@ -32,7 +32,7 @@ window.__ModuleLoader__.load({
     const PERSIST_VERSION = 1;
 
     const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
-    const MAX_VIDEO_BYTES = 400 * 1024 * 1024;
+    const MAX_VIDEO_BYTES = 8 * 1024 * 1024 * 1024; // 8GB，与 Host 默认上传上限一致
     const MAX_ANNOTATION_ITEMS = 80;
     const MAX_EXPORT_EDGE = 4096;
     const MAX_SHOT_ROWS = 200;
@@ -3589,12 +3589,12 @@ window.__ModuleLoader__.load({
       'import.noImage': '尚未导入图片',
       'import.pathAria': '工作区素材绝对路径',
       'import.pathPlaceholder': '工作区绝对路径，例如 C:\\作品\\镜头01.jpg',
-      'import.sizeHint': '图片 ≤ 30MB；视频 ≤ 400MB；上传后保存在插件数据目录。',
+      'import.sizeHint': '图片 ≤ 30MB；视频 ≤ 8GB（更大的视频建议直接填绝对路径，免上传）；上传后保存在插件数据目录。',
       'import.summaryImage': '已导入图片',
       'import.summaryVideo': '已导入视频',
       'import.title': '1 · 导入素材',
       'import.tooLargeImage': '图片超过 30MB 限制',
-      'import.tooLargeVideo': '视频超过 400MB 限制',
+      'import.tooLargeVideo': '视频超过 8GB 限制（更大的视频请直接用绝对路径导入，不上传）',
       'import.unsupported': '不支持的文件类型',
       'import.useAsImage': '作为当前画面',
       'metrics.aspect': '画幅比',
@@ -3846,12 +3846,12 @@ window.__ModuleLoader__.load({
       'import.noImage': 'No image imported',
       'import.pathAria': 'Workspace media absolute path',
       'import.pathPlaceholder': 'Workspace absolute path, e.g. C:\\work\\shot01.jpg',
-      'import.sizeHint': 'Images ≤ 30MB; videos ≤ 400MB; uploads are stored in the plugin data directory.',
+      'import.sizeHint': 'Images ≤ 30MB; videos ≤ 8GB (for larger videos, enter an absolute path instead of uploading); uploads are stored in the plugin data directory.',
       'import.summaryImage': 'Image loaded',
       'import.summaryVideo': 'Video loaded',
       'import.title': '1 · Import material',
       'import.tooLargeImage': 'Image exceeds the 30MB limit',
-      'import.tooLargeVideo': 'Video exceeds the 400MB limit',
+      'import.tooLargeVideo': 'Video exceeds the 8GB limit (for larger videos, enter the absolute path instead of uploading)',
       'import.unsupported': 'Unsupported file type',
       'import.useAsImage': 'Use as current frame',
       'metrics.aspect': 'Aspect ratio',
