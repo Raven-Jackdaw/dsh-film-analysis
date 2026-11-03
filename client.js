@@ -367,6 +367,7 @@ window.__ModuleLoader__.load({
         status: null,
         busy: {},
         knowledge: emptyKnowledgeState(),
+        aiResults: {},
       };
     }
 
@@ -1547,6 +1548,40 @@ window.__ModuleLoader__.load({
       void copyWithFeedback(text, null).catch(() => undefined);
     }
 
+    /** 一键 AI 分析：Host 直接调用会话默认模型，结果写回面板（不经过对话）。 */
+    async function analyzeShotAI(shot, resultKey) {
+      const state = store.getSnapshot();
+      if (!state.video || !state.video.path) {
+        flash('warn', T('shots.needVideo'));
+        return;
+      }
+      const key = resultKey || String(shot.index);
+      await runTask(`ai-${key}`, async () => {
+        flash('info', T('shots.aiAnalyzing'));
+        const allShots = state.video.autoShots && Array.isArray(state.video.autoShots.shots) ? state.video.autoShots.shots : [];
+        const position = allShots.findIndex((item) => item.index === shot.index);
+        const prevShot = position > 0 ? allShots[position - 1] : null;
+        const nextShot = position >= 0 && position < allShots.length - 1 ? allShots[position + 1] : null;
+        const data = await invoke('aiAnalyzeShot', {
+          videoPath: state.video.path,
+          start: shot.start,
+          end: shot.end,
+          shotIndex: shot.index,
+          totalShots: state.video.autoShots ? state.video.autoShots.totalShots : 0,
+          frames: shot.frames || [{ time: shot.time, path: shot.framePath, url: shot.frameUrl }],
+          metrics: shot.metrics || null,
+          prevShot: prevShot ? { start: prevShot.start, end: prevShot.end } : null,
+          nextShot: nextShot ? { start: nextShot.start, end: nextShot.end } : null,
+        });
+        store.set((previous) => ({
+          ...previous,
+          aiResults: { ...(previous.aiResults || {}), [key]: { ...data, at: Date.now() } },
+        }));
+        const seconds = data && data.timings ? Math.round((data.timings.totalMs || 0) / 1000) : null;
+        flash('success', `${T('shots.aiDone')}${seconds !== null ? `（${seconds}s）` : ''}`);
+      });
+    }
+
     function buildReportMarkdown() {
       const state = store.getSnapshot();
       const dimensions = dimensionsOf(state);
@@ -1846,6 +1881,31 @@ window.__ModuleLoader__.load({
 .fa-shot-thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: #000; }
 .fa-shot-title { font-size: 12px; font-weight: 600; }
 .fa-shot-sub { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.fa-ai-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+.fa-ai-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fa-ai-title { font-weight: 600; font-size: 13px; }
+.fa-ai-stats { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.fa-ai-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow: auto;
+  margin: 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--dsw-alias-label-primary);
+}
+.fa-ai-warn { color: var(--dsw-alias-state-warn-primary); }
+.fa-shot-card-busy { opacity: 0.65; cursor: progress; }
 .fa-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; word-break: break-all; }
 .fa-divider { height: 1px; background: var(--dsw-alias-border-l1); margin: 2px 0; }
 /* ---- 按钮 ---- */
@@ -2566,7 +2626,14 @@ window.__ModuleLoader__.load({
       const video = state.video;
       const data = video && video.autoShots ? video.autoShots : null;
       const [selected, setSelected] = useState(-1);
+      const [selectedKey, setSelectedKey] = useState('');
       const busy = Boolean(state.busy.shots);
+      const { aiResults = {} } = state;
+      const selectedShot = data && selected > 0 ? data.shots.find((shot) => shot.index === selected) || null : null;
+      const aiKey = selectedKey || (selected > 0 ? String(selected) : '');
+      const ai = aiKey ? aiResults[aiKey] || null : null;
+      const aiBusy = aiKey ? Boolean(state.busy[`ai-${aiKey}`]) : false;
+      const isSegment = aiKey.includes('-');
       const summary = data ? `${asNumberOrDash(data.returned)} / ${asNumberOrDash(data.totalShots)}` : t('shots.summaryEmpty');
       let body;
       if (!video || !video.path) {
@@ -2598,11 +2665,12 @@ window.__ModuleLoader__.load({
                     {
                       key: shot.index,
                       type: 'button',
-                      className: `fa-shot-card${selected === shot.index ? ' fa-shot-card-active' : ''}`,
+                      className: `fa-shot-card${selected === shot.index ? ' fa-shot-card-active' : ''}${state.busy[`ai-${shot.index}`] ? ' fa-shot-card-busy' : ''}`,
                       title: t('shots.clickHint'),
                       onClick: () => {
                         setSelected(shot.index);
-                        analyzeShot(shot, props.inputActions);
+                        setSelectedKey(String(shot.index));
+                        analyzeShotAI(shot, String(shot.index));
                       },
                     },
                     h('img', { className: 'fa-shot-thumb', src: assetUrl(shot.frameUrl), alt: '' }),
@@ -2620,6 +2688,130 @@ window.__ModuleLoader__.load({
                 ),
               )
             : h(FaEmpty, { text: t('shots.empty') }),
+          selectedShot
+            ? h(
+                'div',
+                { className: 'fa-ai-box' },
+                h(
+                  'div',
+                  { className: 'fa-ai-head' },
+                  h(
+                    'span',
+                    { className: 'fa-ai-title' },
+                    `${t('shots.aiResultTitle')} · #${selectedShot.index}${isSegment ? ` · ${t('shots.aiSegment')}` : ''}${ai && ai.start !== undefined ? `（${formatSeconds(ai.start)}–${formatSeconds(ai.end)}）` : ''}`,
+                  ),
+                  ai
+                    ? h(FaBadge, {
+                        text: ai.mode === 'vision' ? t('shots.aiModeVision') : t('shots.aiModeText'),
+                        kind: ai.mode === 'vision' ? 'ok' : 'warn',
+                      })
+                    : null,
+                  ai && ai.model ? h('span', { className: 'fa-hint' }, `${t('shots.aiModel')}：${ai.model}`) : null,
+                ),
+                aiBusy
+                  ? h(
+                      'div',
+                      { className: 'fa-row' },
+                      h('span', { className: 'fa-spinner', 'aria-hidden': 'true' }),
+                      h('span', { className: 'fa-hint' }, t('shots.aiAnalyzingHint')),
+                    )
+                  : null,
+                ai && ai.clip
+                  ? h(
+                      'div',
+                      { className: 'fa-ai-stats' },
+                      h('span', null, `${t('shots.aiClipMotion')}：${asString(ai.clip.motion && ai.clip.motion.class) || '—'}`),
+                      h('span', null, `${t('shots.aiClipBrightness')}：${asNumberOrDash(ai.clip.brightness && ai.clip.brightness.mean)}/255`),
+                      h(
+                        'span',
+                        null,
+                        `${t('shots.aiClipAudio')}：${
+                          ai.clip.audio
+                            ? `${asNumberOrDash(ai.clip.audio.meanVolumeDb)}dB · ${t('shots.aiSilence')} ${Math.round((asFiniteNumber(ai.clip.audio.silenceRatio) || 0) * 100)}%`
+                            : '—'
+                        }`,
+                      ),
+                      ai.usage
+                        ? h(
+                            'span',
+                            null,
+                            `${t('shots.aiUsage')}：${asNumberOrDash(ai.usage.totalTokens ?? (asFiniteNumber(ai.usage.inputTokens) || 0) + (asFiniteNumber(ai.usage.outputTokens) || 0))} tok${
+                              ai.estimatedCostCny !== null && ai.estimatedCostCny !== undefined ? ` · ≈¥${ai.estimatedCostCny}` : ''
+                            }`,
+                          )
+                        : null,
+                    )
+                  : null,
+                ai && ai.mode === 'text-only' ? h('div', { className: 'fa-hint fa-ai-warn' }, t('shots.aiTextOnlyWarning')) : null,
+                selectedShot && Array.isArray(selectedShot.segments) && selectedShot.segments.length > 0
+                  ? h(
+                      'div',
+                      { className: 'fa-row' },
+                      h('span', { className: 'fa-hint' }, t('shots.aiSegments')),
+                      selectedShot.segments.map((segment) => {
+                        const segmentKey = `${selectedShot.index}-${segment.index}`;
+                        return h(FaButton, {
+                          key: segmentKey,
+                          small: true,
+                          variant: 'ghost',
+                          pressed: aiKey === segmentKey,
+                          busy: Boolean(state.busy[`ai-${segmentKey}`]),
+                          label: `${formatSeconds(segment.start)}–${formatSeconds(segment.end)}`,
+                          onClick: () => {
+                            setSelectedKey(segmentKey);
+                            analyzeShotAI(
+                              {
+                                index: selectedShot.index,
+                                start: segment.start,
+                                end: segment.end,
+                                duration: segment.duration,
+                                frames: null,
+                                metrics: selectedShot.metrics,
+                              },
+                              segmentKey,
+                            );
+                          },
+                        });
+                      }),
+                    )
+                  : null,
+                ai && ai.truncated ? h('div', { className: 'fa-hint fa-ai-warn' }, t('shots.aiTruncated')) : null,
+                ai ? h('pre', { className: 'fa-ai-text' }, ai.text) : aiBusy ? null : h(FaEmpty, { text: t('shots.aiEmpty') }),
+                ai
+                  ? h(
+                      'div',
+                      { className: 'fa-row' },
+                      h(FaButton, {
+                        label: t('shots.aiCopy'),
+                        variant: 'ghost',
+                        small: true,
+                        onClick: () => void copyWithFeedback(ai.text),
+                      }),
+                      h(FaButton, {
+                        label: t('shots.aiRerun'),
+                        small: true,
+                        onClick: () =>
+                          analyzeShotAI(
+                            {
+                              index: selectedShot.index,
+                              start: ai.start !== undefined ? ai.start : selectedShot.start,
+                              end: ai.end !== undefined ? ai.end : selectedShot.end,
+                              duration: ai.duration !== undefined ? ai.duration : selectedShot.duration,
+                              frames: null,
+                              metrics: selectedShot.metrics,
+                            },
+                            aiKey,
+                          ),
+                      }),
+                      h(FaButton, {
+                        label: t('shots.aiSendPrompt'),
+                        small: true,
+                        onClick: () => analyzeShot(selectedShot, props.inputActions),
+                      }),
+                    )
+                  : null,
+              )
+            : null,
           data && data.truncated ? h('div', { className: 'fa-hint' }, t('shots.truncated')) : null,
           h('div', { className: 'fa-hint' }, t('shots.clickHint')),
         );
@@ -3728,13 +3920,34 @@ window.__ModuleLoader__.load({
       'export.shots': '分镜 / 镜头表',
       'export.shotsHint': '可直接编辑；下载为 UTF-8 BOM 编码的 CSV（列：镜号、时间码、景别、角度和机位、镜头运动、画面内容、声音、时长）。',
       'export.title': '6 · 报告与镜头表',
-      'shots.clickHint': '点击任一镜头卡片：自动生成该镜头的分析提示词并发送给会话 AI，分析结果显示在「对话」里。',
+      'shots.clickHint': '点击镜头：面板内一键 AI 分析（结果显示在下方）；结果里也可选择发送提示词到会话。',
+      'shots.aiAnalyze': 'AI 分析',
+      'shots.aiAnalyzing': 'AI 正在分析该镜头片段…',
+      'shots.aiAnalyzingHint': '正在做片段级运动/亮度/声音分析并调用模型，通常 20–40 秒…',
+      'shots.aiClipAudio': '声音',
+      'shots.aiClipBrightness': '平均亮度',
+      'shots.aiClipMotion': '运动',
+      'shots.aiCopy': '复制结果',
+      'shots.aiDone': 'AI 分析完成',
+      'shots.aiEmpty': '点击上方任一镜头，插件会直接在这里生成八维分析（无需去对话）',
+      'shots.aiModeText': '纯文本模式',
+      'shots.aiModeVision': '看图模式',
+      'shots.aiModel': '模型',
+      'shots.aiRerun': '重新分析',
+      'shots.aiResultTitle': 'AI 八维分析',
+      'shots.aiSendPrompt': '发送提示词到会话',
+      'shots.aiSilence': '静音',
+      'shots.aiUsage': '用量',
+      'shots.aiSegment': '分段',
+      'shots.aiSegments': '长镜头分段分析：',
+      'shots.aiTruncated': '输出达到长度上限被截断；可点「重新分析」或改用分段分析以获得完整内容。',
+      'shots.aiTextOnlyWarning': '当前模型未能接收图片，本结果主要基于客观数据与 OCR，画面语义可能不完整。',
       'shots.detect': '自动检测镜头',
       'shots.detected': '镜头检测完成',
       'shots.detecting': '正在检测镜头…',
       'shots.empty': '尚未检测镜头，点击「自动检测镜头」开始。',
       'shots.filled': '提示词已填入输入框，请发送',
-      'shots.hint': '自动检测镜头切换，为每个镜头抽代表帧（长镜头自动抽多帧）并测量，自动裁掉黑边；点镜头即可让会话 AI 输出该镜头的八维分析。',
+      'shots.hint': '自动检测镜头（长镜头抽多帧、自动裁黑边）；点任一镜头 = 一键 AI 分析（片段级运动/亮度/声音 + 多帧），通常 20–40 秒出结果。',
       'shots.longShot': '长镜头 · {count} 帧',
       'shots.needVideo': '先在顶部导入 / 载入一个视频，再使用自动拉片。',
       'shots.redetect': '重新检测镜头',
@@ -4000,13 +4213,34 @@ window.__ModuleLoader__.load({
       'export.shots': 'Shot list',
       'export.shotsHint': 'Editable; downloads as UTF-8 BOM CSV (shot, timecode, shot size, angle & camera, movement, content, sound, duration).',
       'export.title': '6 · Reports & shot list',
-      'shots.clickHint': 'Click any shot card: the plugin builds the analysis prompt for that shot and sends it to the conversation AI; the result appears in Chat.',
+      'shots.clickHint': 'Click a shot: one-click AI analysis inside the panel (result shown below); you can also send the prompt to chat from the result.',
+      'shots.aiAnalyze': 'AI analysis',
+      'shots.aiAnalyzing': 'The AI is analyzing this shot clip…',
+      'shots.aiAnalyzingHint': 'Computing clip-level motion / brightness / audio and calling the model; usually 20–40s…',
+      'shots.aiClipAudio': 'Audio',
+      'shots.aiClipBrightness': 'Mean brightness',
+      'shots.aiClipMotion': 'Motion',
+      'shots.aiCopy': 'Copy result',
+      'shots.aiDone': 'AI analysis finished',
+      'shots.aiEmpty': 'Click any shot above: the plugin generates the 8-dimension analysis right here (no chat round-trip).',
+      'shots.aiModeText': 'Text mode',
+      'shots.aiModeVision': 'Vision mode',
+      'shots.aiModel': 'Model',
+      'shots.aiRerun': 'Analyze again',
+      'shots.aiResultTitle': 'AI 8-dimension analysis',
+      'shots.aiSendPrompt': 'Send prompt to chat',
+      'shots.aiSilence': 'silence',
+      'shots.aiUsage': 'Usage',
+      'shots.aiSegment': 'segment',
+      'shots.aiSegments': 'Long-take segments:',
+      'shots.aiTruncated': 'Output hit the length limit and was truncated; click Analyze again or analyze by segment for the full text.',
+      'shots.aiTextOnlyWarning': 'The model could not receive images; this result is based mainly on objective data and OCR, so visual semantics may be incomplete.',
       'shots.detect': 'Detect shots',
       'shots.detected': 'Shots detected',
       'shots.detecting': 'Detecting shots…',
       'shots.empty': 'No shots detected yet. Click "Detect shots" to start.',
       'shots.filled': 'Prompt filled into the composer; press send',
-      'shots.hint': 'Detect shot changes, extract representative frames (long takes get several) and measurements with automatic black-bar cropping; click a shot to have the conversation AI analyze it.',
+      'shots.hint': 'Detect shots (long takes get several frames, black bars auto-cropped); click a shot for one-click AI analysis (clip motion/brightness/audio + multiple frames), usually 20–40s.',
       'shots.longShot': 'Long take · {count} frames',
       'shots.needVideo': 'Import or load a video first, then use auto shot analysis.',
       'shots.redetect': 'Detect again',

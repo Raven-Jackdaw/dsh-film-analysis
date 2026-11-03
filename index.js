@@ -10,7 +10,7 @@ export const inject = ['tools', 'webServer'];
 export function apply(ctx, config) {
   const resolvedConfig = config && typeof config === 'object' ? config : {};
   const toolchain = resolveToolchain(resolvedConfig);
-  const service = createService(toolchain);
+  const service = createService(toolchain, ctx);
 
   // agent 工具：与面板 API 共用 service 的实现。
   ctx.effect(() => {
