@@ -23,13 +23,16 @@
 - **自动拉片 + 面板内一键 AI 分析**：自动检测镜头切换（长镜头自动多帧、自动裁黑边），点任一镜头直接在面板里生成「拉片讲解式」详细分析（片段级运动/亮度/声音 + 多帧看图），可复制/重新分析；长镜头自动按 60 秒分段，可逐段分析
 - **整片拉片报告**：一次模型调用输出全片分镜表 + 逐镜头讲解 + 节奏结构 + 风格主题（面板内显示，带 token 用量与费用估算）
 - **按拉片公式输出**：内置「叙事顺序 / 叙事段落 / 叙事音乐」+「剪辑时长 / 剪辑规律 / 剪辑组合」六向拉片框架（参考公开教程《适合所有人的拉片公式》），并结合八维视听语言与逐帧时间线；自动统计镜头时长分布、重复节拍组合与每镜头音量/静音数据
+- **结果可视化**：AI 镜头分析与整片报告以 Markdown 渲染（标题/粗体/列表/表格/代码块），长文可滚动阅读
+- **知识点速查**：面板内按章节查看术语、定义、两书分析框架与题库（内置从学习笔记整理的知识点总结；教材原文与完整笔记不随包分发）
+- **可调参数**：自动拉片的检测灵敏度（0.10–0.60）与分析详细度（快速 / 详细），兼顾成本与速度
 - **13 个 Agent 工具**：面板里的操作同时暴露为 `film_*` 工具，会话里的 AI 也能直接调用
 
 ## 安装
 
 ### 方式 D：npm 包（最省事，DSH 用户推荐）\n\n本插件已发布到 npm：**dsh-film-analysis**（https://www.npmjs.com/package/dsh-film-analysis）\n\n在 DSH 的 cordis 预设会话中对 AI 说：\n\n> 请用 plugin_manager 安装插件，install_bundle 的 target 是 dsh-film-analysis\n\n首次安装会提示批准 	esseract.js 的构建脚本（内容仅为开源项目捐赠提示，不安装任何东西，可放心允许）；工具链（ffmpeg/ffprobe/中文 OCR）会随 npm 依赖自动下载。\n\n### 方式 A：下载 Release 里的离线包（推荐，Windows x64）
 
-1. 到 [Releases](../../releases) 下载 `dsh-film-analysis-win-x64-v0.1.0.zip`，解压到固定目录（装好后不要移动）：
+1. 到 [Releases](../../releases) 下载 `dsh-film-analysis-win-x64-v0.2.0.zip`，解压到固定目录（装好后不要移动）：
    ```
    C:\Users\<你>\dsh-plugins\dsh-film-analysis
    ```
@@ -85,4 +88,4 @@ docs/                 # README 图片与知识数据说明
 
 ## English
 
-A DeepSeek Harness Web UI plugin for film / audiovisual-language analysis: measure frame metrics, fill an 8-dimension analysis form, annotate frames, generate structured prompts for the conversation agent, and export Markdown reports and shot-list CSV. It also detects shots and produces one-click shot analysis and full-video shot-by-shot reports inside the panel (clip-level motion / brightness / audio + multiple frames, with token/cost display). ffmpeg/ffprobe/Chinese OCR are installed as npm dependencies. Install the plugin bundle via `plugin_manager` in a Cordis-preset session, then refresh the Web UI. Requires DSH `>=0.2.1-rc.2 <0.3.0`; Windows x64 tested. The bundled knowledge data is generic terminology only — no textbook excerpts. The plugin is also published to npm as dsh-film-analysis (install it with plugin_manager target dsh-film-analysis; the first install asks to approve a harmless postinstall script from tesseract.js). Code is MIT-licensed; runtime dependencies keep their own licenses. The panel UI is bilingual (Chinese/English); AI-generated analysis, the built-in terminology library and generated prompts are in Simplified Chinese.
+A DeepSeek Harness Web UI plugin for film / audiovisual-language analysis: measure frame metrics, fill an 8-dimension analysis form, annotate frames, generate structured prompts for the conversation agent, and export Markdown reports and shot-list CSV. It also detects shots and produces one-click shot analysis and full-video shot-by-shot reports inside the panel (clip-level motion / brightness / audio + multiple frames, with token/cost display). ffmpeg/ffprobe/Chinese OCR are installed as npm dependencies. Install the plugin bundle via `plugin_manager` in a Cordis-preset session, then refresh the Web UI. Requires DSH `>=0.2.1-rc.2 <0.3.0`; Windows x64 tested. The bundle includes a knowledge summary distilled from the author's study notes (terms, two-book frameworks, question bank, film index); original textbook text and the full notes are not distributed. The plugin is also published to npm as dsh-film-analysis (install it with plugin_manager target dsh-film-analysis; the first install asks to approve a harmless postinstall script from tesseract.js). Code is MIT-licensed; runtime dependencies keep their own licenses. The panel UI is bilingual (Chinese/English); AI-generated analysis, the built-in terminology library and generated prompts are in Simplified Chinese.
