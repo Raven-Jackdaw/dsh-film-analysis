@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 影视画面分析器 · Client 端（DSH Web UI 插件，单文件纯 JS）
  *
  * 结构（自上而下）：
@@ -3549,6 +3549,9 @@ window.__ModuleLoader__.load({
               ? h('div', { className: 'fa-hint' }, `${t('deep.startedAt')}：${new Date(job.createdAt).toLocaleString()}`)
               : null,
             job && job.error ? h('div', { className: 'fa-hint fa-ai-warn' }, job.error) : null,
+            job && (Array.isArray(job.result && job.result.numericWarnings) && job.result.numericWarnings.length > 0)
+              ? h('div', { className: 'fa-hint fa-ai-warn' }, `${t('deep.numericWarn')}：${job.result.numericWarnings.join('；')}`)
+              : null,
             result && Array.isArray(result.shots) && result.shots.length > 0
               ? h(
                   'div',
@@ -3807,6 +3810,9 @@ window.__ModuleLoader__.load({
                     )
                   : null,
                 ai && ai.mode === 'text-only' ? h('div', { className: 'fa-hint fa-ai-warn' }, t('shots.aiTextOnlyWarning')) : null,
+                ai && ai.numericGuard && Array.isArray(ai.numericGuard.warnings) && ai.numericGuard.warnings.length > 0
+                  ? h('div', { className: 'fa-hint fa-ai-warn' }, ai.numericGuard.warnings.join('；'))
+                  : null,
                 selectedShot && Array.isArray(selectedShot.segments) && selectedShot.segments.length > 0
                   ? h(
                       'div',
@@ -5131,6 +5137,7 @@ window.__ModuleLoader__.load({
       'deep.copyFinal': '复制汇总',
       'deep.copyAll': '复制全文',
       'deep.startedAt': '开始时间',
+      'deep.numericWarn': '数值校验警告',
       'deep.resume': '继续任务',
       'deep.resumed': '任务已恢复',
       'deep.chart': '镜头时长曲线',
@@ -5498,6 +5505,7 @@ window.__ModuleLoader__.load({
       'deep.copyFinal': 'Copy report',
       'deep.copyAll': 'Copy everything',
       'deep.startedAt': 'Started at',
+      'deep.numericWarn': 'Numeric validation warning',
       'deep.resume': 'Resume job',
       'deep.resumed': 'Job resumed',
       'deep.chart': 'Shot-duration curve',
