@@ -1,6 +1,6 @@
 {
   "name": "dsh-film-analysis",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "DSH Web UI plugin for film & audiovisual-language analysis: frame metrics, 8-dimension forms, auto shot detection with AI shot breakdowns, annotation, reports and shot lists. Bundled ffmpeg + offline Chinese OCR. UI: zh/English; analysis output in Simplified Chinese.",
   "type": "module",
   "license": "MIT",
