@@ -175,6 +175,68 @@ window.__ModuleLoader__.load({
       downloadBlob(fileName, new Blob([text], { type: mime || 'text/plain;charset=utf-8' }));
     }
 
+    function srtTimestamp(seconds) {
+      const value = Math.max(0, Number(seconds) || 0);
+      const ms = Math.round((value - Math.floor(value)) * 1000);
+      const total = Math.floor(value);
+      const h = String(Math.floor(total / 3600)).padStart(2, '0');
+      const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+      const s = String(total % 60).padStart(2, '0');
+      return `${h}:${m}:${s},${String(ms).padStart(3, '0')}`;
+    }
+
+    function assTimestamp(seconds) {
+      const value = Math.max(0, Number(seconds) || 0);
+      const cs = Math.round((value - Math.floor(value)) * 100);
+      const total = Math.floor(value);
+      const h = Math.floor(total / 3600);
+      const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+      const s = String(total % 60).padStart(2, '0');
+      return `${h}:${m}:${s}.${String(cs).padStart(2, '0')}`;
+    }
+
+    function buildSubtitleSrt(subtitles) {
+      return subtitles
+        .map((line, index) => `${index + 1}\n${srtTimestamp(line.start)} --> ${srtTimestamp(line.end)}\n${line.text}`)
+        .join('\n\n');
+    }
+
+    function buildSubtitleAss(subtitles) {
+      const header = [
+        '[Script Info]',
+        'Title: film-analysis subtitles',
+        'ScriptType: v4.00+',
+        'WrapStyle: 0',
+        'PlayResX: 1920',
+        'PlayResY: 1080',
+        '',
+        '[V4+ Styles]',
+        'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+        'Style: Default,Microsoft YaHei,54,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,1,2,40,40,60,1',
+        '',
+        '[Events]',
+        'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+      ];
+      const rows = subtitles.map(
+        (line) => `Dialogue: 0,${assTimestamp(line.start)},${assTimestamp(line.end)},Default,,0,0,0,,${String(line.text).replace(/\n/g, '\\N')}`,
+      );
+      return header.concat(rows).join('\n');
+    }
+
+    function exportSubtitleFile(subtitles, kind) {
+      const list = Array.isArray(subtitles) ? subtitles.filter((line) => line && line.text) : [];
+      if (list.length === 0) {
+        flash('warn', T('subtitle.empty'));
+        return;
+      }
+      const base = `subtitles-${fileStamp()}`;
+      if (kind === 'srt') {
+        downloadText(`${base}.srt`, buildSubtitleSrt(list), 'application/x-subrip;charset=utf-8');
+      } else {
+        downloadText(`${base}.ass`, buildSubtitleAss(list), 'text/plain;charset=utf-8');
+      }
+    }
+
     /** 复制文本：优先 Clipboard API，失败时退回到组件自身的 DOM 容器内临时 textarea。 */
     async function copyTextToClipboard(text, container) {
       const value = asString(text);
@@ -372,6 +434,10 @@ window.__ModuleLoader__.load({
         deepJobId: '',
         deepJob: null,
         deepTier: 'standard',
+        analysisTemplate: 'auto',
+        analysisFocus: [],
+        analysisLanguage: 'zh',
+        analysisOptionsData: null,
         subtitles: [],
         context: { title: '', genre: '', story: '', characters: '', note: '' },
       };
@@ -572,6 +638,9 @@ window.__ModuleLoader__.load({
       state.context = sanitizeContext(raw.context);
       state.deepJobId = asString(raw.deepJobId);
       state.deepTier = ['fast', 'standard', 'precise'].includes(raw.deepTier) ? raw.deepTier : 'standard';
+      state.analysisTemplate = ['auto', 'homework', 'exam', 'review', 'shoot', 'quick'].includes(raw.analysisTemplate) ? raw.analysisTemplate : 'auto';
+      state.analysisFocus = Array.isArray(raw.analysisFocus) ? raw.analysisFocus.map(asString).filter(Boolean).slice(0, 10) : [];
+      state.analysisLanguage = ['zh', 'bilingual', 'en'].includes(raw.analysisLanguage) ? raw.analysisLanguage : 'zh';
       return state;
     }
 
@@ -640,6 +709,9 @@ window.__ModuleLoader__.load({
         context: state.context,
         deepJobId: state.deepJobId,
         deepTier: state.deepTier,
+        analysisTemplate: state.analysisTemplate,
+        analysisFocus: state.analysisFocus,
+        analysisLanguage: state.analysisLanguage,
       });
     }
 
@@ -1215,6 +1287,17 @@ window.__ModuleLoader__.load({
       }
     }
 
+    async function ensureAnalysisOptions() {
+      const current = store.getSnapshot().analysisOptionsData;
+      if (current) return;
+      try {
+        const data = await invoke('analysisOptions', {});
+        if (isRecord(data)) store.set((state) => ({ ...state, analysisOptionsData: data }));
+      } catch {
+        /* 选项加载失败不影响分析 */
+      }
+    }
+
     function buildFrameworkSummary() {
       const state = store.getSnapshot();
       const data = state.knowledge && state.knowledge.data;
@@ -1644,6 +1727,9 @@ window.__ModuleLoader__.load({
           detail,
           subtitles: state.subtitles,
           context: state.context,
+          template: state.analysisTemplate,
+          focus: state.analysisFocus,
+          language: state.analysisLanguage,
           prevShot: prevShot ? { start: prevShot.start, end: prevShot.end } : null,
           nextShot: nextShot ? { start: nextShot.start, end: nextShot.end } : null,
         });
@@ -1671,6 +1757,9 @@ window.__ModuleLoader__.load({
           detail,
           subtitles: state.subtitles,
           context: state.context,
+          template: state.analysisTemplate,
+          focus: state.analysisFocus,
+          language: state.analysisLanguage,
           shots: data.shots.map((shot) => ({
             index: shot.index,
             start: shot.start,
@@ -1745,6 +1834,9 @@ window.__ModuleLoader__.load({
           tier: state.deepTier || 'standard',
           subtitles: state.subtitles,
           context: state.context,
+          template: state.analysisTemplate,
+          focus: state.analysisFocus,
+          language: state.analysisLanguage,
         });
         store.set((previous) => ({
           ...previous,
@@ -3177,6 +3269,22 @@ window.__ModuleLoader__.load({
           }),
           subtitles.length > 0
             ? h(FaButton, {
+                label: t('ctx.exportSrt'),
+                small: true,
+                variant: 'ghost',
+                onClick: () => exportSubtitleFile(subtitles, 'srt'),
+              })
+            : null,
+          subtitles.length > 0
+            ? h(FaButton, {
+                label: t('ctx.exportAss'),
+                small: true,
+                variant: 'ghost',
+                onClick: () => exportSubtitleFile(subtitles, 'ass'),
+              })
+            : null,
+          subtitles.length > 0
+            ? h(FaButton, {
                 label: t('ctx.clear'),
                 small: true,
                 variant: 'ghost',
@@ -3425,6 +3533,7 @@ window.__ModuleLoader__.load({
         'div',
         { className: 'fa-stack' },
         h('div', { className: 'fa-hint' }, t('deep.hint')),
+        h(AnalysisOptionsRow, { t, state }),
         h(
           'div',
           { className: 'fa-row' },
@@ -3565,6 +3674,8 @@ window.__ModuleLoader__.load({
                   'div',
                   { className: 'fa-ai-box' },
                   h('div', { className: 'fa-ai-head' }, h('span', { className: 'fa-ai-title' }, t('deep.final'))),
+                  h(QualityLine, { t, quality: result.quality }),
+                  h(RelatedLine, { t, related: result.related }),
                   h(FaMarkdown, { text: result.finalText || '' }),
                   h(
                     'div',
@@ -3641,6 +3752,93 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function QualityLine(props) {
+      const t = props.t || T;
+      const quality = props.quality;
+      if (!quality) return null;
+      return h(
+        'div',
+        { className: 'fa-hint' },
+        `${t('quality.badge')}：${quality.grade}（${quality.score}）· ${t('quality.citations')} ${quality.citations} · ${t('quality.dimensions')} ${quality.dimensions}/8 · ${t('quality.terms')} ${quality.termHits}`,
+      );
+    }
+
+    function RelatedLine(props) {
+      const t = props.t || T;
+      const related = props.related;
+      if (!related) return null;
+      const films = Array.isArray(related.films) ? related.films.map((item) => item.title) : [];
+      const terms = Array.isArray(related.terms) ? related.terms.map((item) => item.term) : [];
+      const parts = [];
+      if (films.length > 0) parts.push(`${t('related.films')}：${films.join('、')}`);
+      if (terms.length > 0) parts.push(`${t('related.terms')}：${terms.join('、')}`);
+      if (parts.length === 0) return null;
+      return h('div', { className: 'fa-hint' }, parts.join(' · '));
+    }
+
+    function AnalysisOptionsRow(props) {
+      const t = props.t;
+      const state = props.state;
+      const data = state.analysisOptionsData;
+      if (!data) return null;
+      const templates = Array.isArray(data.templates) ? data.templates : [];
+      const dims = Array.isArray(data.focusDimensions) ? data.focusDimensions : [];
+      const languages = Array.isArray(data.languages) ? data.languages : [];
+      const focus = Array.isArray(state.analysisFocus) ? state.analysisFocus : [];
+      return h(
+        'div',
+        { className: 'fa-stack' },
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('options.template')),
+          templates.map((item) =>
+            h(FaButton, {
+              key: item.id,
+              small: true,
+              variant: (state.analysisTemplate || 'auto') === item.id ? 'primary' : 'ghost',
+              label: item.name,
+              onClick: () => store.set((previous) => ({ ...previous, analysisTemplate: item.id })),
+            }),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('options.focus')),
+          dims.map((item) => {
+            const active = focus.includes(item.name);
+            return h(FaButton, {
+              key: item.id,
+              small: true,
+              variant: active ? 'primary' : 'ghost',
+              label: item.name,
+              onClick: () =>
+                store.set((previous) => {
+                  const list = Array.isArray(previous.analysisFocus) ? previous.analysisFocus : [];
+                  const next = active ? list.filter((name) => name !== item.name) : [...list, item.name];
+                  return { ...previous, analysisFocus: next };
+                }),
+            });
+          }),
+        ),
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('options.language')),
+          languages.map((item) =>
+            h(FaButton, {
+              key: item.id,
+              small: true,
+              variant: (state.analysisLanguage || 'zh') === item.id ? 'primary' : 'ghost',
+              label: item.name,
+              onClick: () => store.set((previous) => ({ ...previous, analysisLanguage: item.id })),
+            }),
+          ),
+        ),
+      );
+    }
+
     function AutoShotsSection(props) {
       const t = props.t;
       const state = props.state;
@@ -3702,6 +3900,7 @@ window.__ModuleLoader__.load({
             }),
             h('span', { className: 'fa-hint' }, t('shots.detailHint')),
           ),
+          h(AnalysisOptionsRow, { t, state }),
           h(
             'div',
             { className: 'fa-row' },
@@ -3813,6 +4012,8 @@ window.__ModuleLoader__.load({
                 ai && ai.numericGuard && Array.isArray(ai.numericGuard.warnings) && ai.numericGuard.warnings.length > 0
                   ? h('div', { className: 'fa-hint fa-ai-warn' }, ai.numericGuard.warnings.join('；'))
                   : null,
+                ai ? h(QualityLine, { t, quality: ai.quality }) : null,
+                ai ? h(RelatedLine, { t, related: ai.related }) : null,
                 selectedShot && Array.isArray(selectedShot.segments) && selectedShot.segments.length > 0
                   ? h(
                       'div',
@@ -3907,6 +4108,8 @@ window.__ModuleLoader__.load({
                     : null,
                 ),
                 report.truncated ? h('div', { className: 'fa-hint fa-ai-warn' }, t('shots.aiTruncated')) : null,
+                h(QualityLine, { t, quality: report.quality }),
+                h(RelatedLine, { t, related: report.related }),
                 h(FaMarkdown, { text: report.text }),
                 h(
                   'div',
@@ -4859,6 +5062,7 @@ window.__ModuleLoader__.load({
       const panelRef = useRef(null);
       useEffect(() => {
         ensureKnowledge(false);
+        ensureAnalysisOptions();
         const snapshot = store.getSnapshot();
         if (snapshot.deepJobId) void pollDeepJob(snapshot.deepJobId);
         return undefined;
@@ -5085,6 +5289,18 @@ window.__ModuleLoader__.load({
       'ctx.title': 'AI 上下文与台词（可选）',
       'ctx.hint': '导入带时间码的字幕（.srt/.vtt）或纯文本台词，并填写影片背景/剧情/人物关系；这些会作为“可信输入”交给模型，明显减少推测。',
       'ctx.import': '导入字幕/台词',
+      'ctx.exportSrt': '导出 SRT',
+      'ctx.exportAss': '导出 ASS',
+      'subtitle.empty': '没有可导出的字幕。',
+      'options.template': '模板',
+      'options.focus': '聚焦维度',
+      'options.language': '输出语言',
+      'quality.badge': '分析质量',
+      'quality.citations': '引用',
+      'quality.dimensions': '维度覆盖',
+      'quality.terms': '术语',
+      'related.films': '相关片例',
+      'related.terms': '相关术语',
       'ctx.clear': '清除台词',
       'ctx.imported': '已导入',
       'ctx.empty': '尚未导入台词',
@@ -5453,6 +5669,18 @@ window.__ModuleLoader__.load({
       'ctx.title': 'AI context & dialogue (optional)',
       'ctx.hint': 'Import timed subtitles (.srt/.vtt) or plain dialogue text, and fill in film background / story / character relations; these are passed to the model as trusted input and reduce speculation.',
       'ctx.import': 'Import subtitles',
+      'ctx.exportSrt': 'Export SRT',
+      'ctx.exportAss': 'Export ASS',
+      'subtitle.empty': 'No subtitles to export.',
+      'options.template': 'Template',
+      'options.focus': 'Focus',
+      'options.language': 'Language',
+      'quality.badge': 'Quality',
+      'quality.citations': 'citations',
+      'quality.dimensions': 'dimensions',
+      'quality.terms': 'terms',
+      'related.films': 'Related films',
+      'related.terms': 'Related terms',
       'ctx.clear': 'Clear subtitles',
       'ctx.imported': 'Imported',
       'ctx.empty': 'No subtitles imported',

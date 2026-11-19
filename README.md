@@ -40,7 +40,7 @@
 
 本插件已发布到 npm：**dsh-film-analysis**（https://www.npmjs.com/package/dsh-film-analysis）
 
-> ✅ npm 最新版与仓库同步（**v0.3.9**），可直接用下面的 npm 方式安装；离线包同样可用。
+> ✅ npm 最新版与仓库同步（**v0.3.10**），可直接用下面的 npm 方式安装；离线包同样可用。
 
 在 DSH 的 cordis 预设会话中对 AI 说：
 
@@ -50,7 +50,7 @@
 
 ### 方式 A：下载 Release 里的离线包（推荐，Windows x64）
 
-1. 到 [Releases](../../releases) 下载 `dsh-film-analysis-win-x64-v0.3.9.zip`，解压到固定目录（装好后不要移动）：
+1. 到 [Releases](../../releases) 下载 `dsh-film-analysis-win-x64-v0.3.10.zip`，解压到固定目录（装好后不要移动）：
    ```
    C:\Users\<你>\dsh-plugins\dsh-film-analysis
    ```
