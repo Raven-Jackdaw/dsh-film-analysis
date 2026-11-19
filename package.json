@@ -29,6 +29,7 @@
     "icon.svg",
     "lib/**/*.js",
     "lib/**/*.py",
+    "runtime/**",
     "docs/*.md",
     "docs/*.png"
   ],
@@ -39,6 +40,9 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@ffprobe-installer/ffprobe": "^1.1.0",
     "@tesseract.js-data/chi_sim": "^1.0.0",
+    "adm-zip": "^0.5.16",
+    "sharp": "^0.34.5",
+    "sherpa-onnx-node": "^2.0.2",
     "tesseract.js": "^7.0.0"
   },
   "dsh": {
