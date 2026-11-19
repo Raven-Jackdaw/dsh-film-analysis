@@ -4060,7 +4060,7 @@ window.__ModuleLoader__.load({
             : null,
         ),
       );
-      return h(FaSection, { t, title: t('edit.title'), summary: t('edit.subtitle'), defaultOpen: false }, body);
+      return h(FaSection, { t, title: t('edit.title'), summary: t('edit.subtitle'), defaultOpen: true }, body);
     }
 
     function AnalysisOptionsRow(props) {
@@ -5361,8 +5361,8 @@ window.__ModuleLoader__.load({
         h(ImportSection, { t, state }),
         h(ContextSection, { t, state }),
         h(AutoShotsSection, { t, state, inputActions: props.inputActions }),
-        h(DeepSection, { t, state, openView: props.openView }),
         h(EditVideoSection, { t, state }),
+        h(DeepSection, { t, state, openView: props.openView }),
         h(MeasureSection, { t, state }),
         h(AnalysisFormSection, { t, state }),
         h(KnowledgeSection, { t, state }),
@@ -5642,7 +5642,7 @@ window.__ModuleLoader__.load({
       'deep.copyAll': '复制全文',
       'deep.startedAt': '开始时间',
       'deep.numericWarn': '数值校验警告',
-      'edit.title': '解说视频（Beta）',
+      'edit.title': '生成解说视频（Beta）',
       'edit.subtitle': '剪辑成片 · 口播稿 · 字幕（配音待定）',
       'edit.scheme': '剪辑方案',
       'edit.schemeAuto': '一键成片',
@@ -6049,7 +6049,7 @@ window.__ModuleLoader__.load({
       'deep.copyAll': 'Copy everything',
       'deep.startedAt': 'Started at',
       'deep.numericWarn': 'Numeric validation warning',
-      'edit.title': 'Narrated video (Beta)',
+      'edit.title': 'Generate narrated video (Beta)',
       'edit.subtitle': 'Cut, script and subtitles (voice TBD)',
       'edit.scheme': 'Editing scheme',
       'edit.schemeAuto': 'One-click',
