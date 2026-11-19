@@ -2211,6 +2211,7 @@ window.__ModuleLoader__.load({
 .fa-deep-bar { fill: var(--dsw-alias-brand-primary); opacity: 0.85; }
 .fa-deep-chart-label { fill: var(--dsw-alias-label-secondary); font-size: 9px; text-anchor: middle; }
 .fa-link { color: var(--dsw-alias-brand-primary); font-size: 12px; text-decoration: none; }
+.fa-input { width: 64px; height: 26px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-secondary); border-radius: 6px; background: var(--dsw-alias-bg-primary); color: var(--dsw-alias-label-primary); font-size: 12px; }
 .fa-link:hover { text-decoration: underline; }
 /* ---- AI 结果 Markdown ---- */
 .fa-md {
@@ -3810,6 +3811,9 @@ window.__ModuleLoader__.load({
       const [subs, setSubs] = useState(null);
       const [voiceStatus, setVoiceStatus] = useState(null);
       const [voiceTier, setVoiceTier] = useState('standard');
+      const [voiceSid, setVoiceSid] = useState(0);
+      const [voiceOptions, setVoiceOptions] = useState(null);
+      const [audition, setAudition] = useState(null);
       const [narrated, setNarrated] = useState(null);
       const [busy, setBusy] = useState({});
       const shots = video && video.autoShots && Array.isArray(video.autoShots.shots) ? video.autoShots.shots : [];
@@ -3824,6 +3828,11 @@ window.__ModuleLoader__.load({
         invoke('voiceStatus', {})
           .then((data) => {
             if (alive && isRecord(data)) setVoiceStatus(data);
+          })
+          .catch(() => {});
+        invoke('voiceOptions', {})
+          .then((data) => {
+            if (alive && isRecord(data)) setVoiceOptions(data);
           })
           .catch(() => {});
         return () => {
@@ -3918,6 +3927,16 @@ window.__ModuleLoader__.load({
           flash('success', t('edit.subsDone'));
         });
 
+      const doAudition = () =>
+        run('audition', async () => {
+          const data = await invoke('auditionVoice', {
+            text: '这是影视画面分析器的音色试听示例。',
+            voiceTier,
+            sid: voiceSid,
+          });
+          setAudition(data);
+        });
+
       const doNarrate = () =>
         run('narrate', async () => {
           if (!video || !video.path) {
@@ -3938,6 +3957,7 @@ window.__ModuleLoader__.load({
             targetSeconds: target,
             voiceTier,
             preset,
+            sid: voiceSid,
           });
           setNarrated(data);
           flash('success', t('edit.narratedDone'));
@@ -4123,6 +4143,32 @@ window.__ModuleLoader__.load({
               });
             },
           }),
+        ),
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('edit.voiceSid')),
+          h('input', {
+            className: 'fa-input',
+            type: 'number',
+            min: 0,
+            max: Math.max(0, (voiceOptions && voiceOptions.standard && voiceOptions.standard.numSpeakers ? voiceOptions.standard.numSpeakers : 1) - 1),
+            value: voiceSid,
+            onChange: (event) => setVoiceSid(Math.max(0, Number(event.target.value) || 0)),
+          }),
+          h(FaButton, {
+            label: busy.audition ? t('edit.generating') : t('edit.audition'),
+            small: true,
+            busy: Boolean(busy.audition),
+            disabled: Boolean(busy.audition),
+            onClick: () => void doAudition(),
+          }),
+          voiceOptions && voiceOptions.standard
+            ? h('span', { className: 'fa-hint' }, `${t('edit.voices')} ${voiceOptions.standard.numSpeakers || 0}`)
+            : null,
+          audition && audition.url
+            ? h('audio', { controls: true, src: assetUrl(audition.url), style: { height: '28px', maxWidth: '180px' } })
+            : null,
         ),
         h(FaButton, {
           label: busy.narrate ? t('edit.generating') : t('edit.genNarrated'),
@@ -5767,6 +5813,9 @@ window.__ModuleLoader__.load({
       'edit.subsDone': '字幕已生成',
       'edit.needSubs': '请先导入或转写字幕。',
       'edit.voiceHint': '普通语音已内置（sherpa-onnx，随包离线）；Plus 语音包待发布。',
+      'edit.voiceSid': '音色编号',
+      'edit.audition': '试听',
+      'edit.voices': '可选音色',
       'edit.plusDownloading': 'Plus 语音包下载中…',
       'edit.plusDownloaded': 'Plus 语音包已安装',
       'edit.plusDownloadFailed': 'Plus 语音包下载失败：请稍后重试或检查网络。',
@@ -6185,6 +6234,9 @@ window.__ModuleLoader__.load({
       'edit.subsDone': 'Subtitles generated',
       'edit.needSubs': 'Import or transcribe subtitles first.',
       'edit.voiceHint': 'Standard voice is bundled (sherpa-onnx, offline). Plus voice pack coming soon.',
+      'edit.voiceSid': 'Voice ID',
+      'edit.audition': 'Audition',
+      'edit.voices': 'Voices',
       'edit.plusDownloading': 'Downloading Plus voice pack…',
       'edit.plusDownloaded': 'Plus voice pack installed',
       'edit.plusDownloadFailed': 'Plus voice pack download failed. Please retry later.',
