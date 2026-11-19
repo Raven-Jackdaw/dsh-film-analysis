@@ -2210,6 +2210,8 @@ window.__ModuleLoader__.load({
 .fa-deep-chart { width: 100%; height: auto; display: block; }
 .fa-deep-bar { fill: var(--dsw-alias-brand-primary); opacity: 0.85; }
 .fa-deep-chart-label { fill: var(--dsw-alias-label-secondary); font-size: 9px; text-anchor: middle; }
+.fa-link { color: var(--dsw-alias-brand-primary); font-size: 12px; text-decoration: none; }
+.fa-link:hover { text-decoration: underline; }
 /* ---- AI 结果 Markdown ---- */
 .fa-md {
   max-height: none;
@@ -3776,6 +3778,291 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'fa-hint' }, parts.join(' · '));
     }
 
+    function parseClipsText(text) {
+      return String(text || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const match = /^(\d+(?:\.\d+)?)\s*[-–~,，]\s*(\d+(?:\.\d+)?)$/.exec(line);
+          if (!match) return null;
+          const inPoint = Number(match[1]);
+          const outPoint = Number(match[2]);
+          if (!(outPoint > inPoint)) return null;
+          return { in: inPoint, out: outPoint };
+        })
+        .filter(Boolean);
+    }
+
+    function EditVideoSection(props) {
+      const t = props.t;
+      const state = props.state;
+      const video = state.video;
+      const [options, setOptions] = useState(null);
+      const [scheme, setScheme] = useState('auto');
+      const [editMode, setEditMode] = useState('commentary');
+      const [target, setTarget] = useState(180);
+      const [clipsText, setClipsText] = useState('');
+      const [result, setResult] = useState(null);
+      const [script, setScript] = useState('');
+      const [scriptInfo, setScriptInfo] = useState(null);
+      const [preset, setPreset] = useState('classic');
+      const [subs, setSubs] = useState(null);
+      const [busy, setBusy] = useState({});
+      const shots = video && video.autoShots && Array.isArray(video.autoShots.shots) ? video.autoShots.shots : [];
+
+      useEffect(() => {
+        let alive = true;
+        invoke('editOptions', {})
+          .then((data) => {
+            if (alive && isRecord(data)) setOptions(data);
+          })
+          .catch(() => {});
+        return () => {
+          alive = false;
+        };
+      }, []);
+
+      useEffect(() => {
+        if (clipsText === '' && shots.length > 0) {
+          setClipsText(shots.map((shot) => `${Number(shot.start).toFixed(2)}-${Number(shot.end).toFixed(2)}`).join('\n'));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [shots.length]);
+
+      const reportText = (() => {
+        const job = state.deepJob;
+        if (job && job.result && job.result.finalText) return job.result.finalText;
+        if (state.videoReport && state.videoReport.text) return state.videoReport.text;
+        if (job && Array.isArray(job.segments) && job.segments.length > 0) {
+          return job.segments.map((segment) => segment.markdown || '').join('\n\n');
+        }
+        return '';
+      })();
+
+      const run = async (key, action) => {
+        setBusy((previous) => ({ ...previous, [key]: true }));
+        try {
+          await action();
+        } catch (error) {
+          flash('error', errorText(error));
+        } finally {
+          setBusy((previous) => ({ ...previous, [key]: false }));
+        }
+      };
+
+      const doAuto = () =>
+        run('auto', async () => {
+          if (!video || !video.path) {
+            flash('warn', t('edit.needVideo'));
+            return;
+          }
+          const data = await invoke('autoEdit', {
+            videoPath: video.path,
+            mode: editMode,
+            targetSeconds: target,
+            shots: shots.length > 0 ? shots : undefined,
+          });
+          setResult(data);
+          flash('success', t('edit.resultDone'));
+        });
+
+      const doManual = () =>
+        run('manual', async () => {
+          if (!video || !video.path) {
+            flash('warn', t('edit.needVideo'));
+            return;
+          }
+          const clips = parseClipsText(clipsText);
+          if (clips.length === 0) {
+            flash('warn', t('edit.needClips'));
+            return;
+          }
+          const data = await invoke('manualEdit', { videoPath: video.path, clips });
+          setResult(data);
+          flash('success', t('edit.resultDone'));
+        });
+
+      const doScript = () =>
+        run('script', async () => {
+          if (!reportText) {
+            flash('warn', t('edit.needAnalysis'));
+            return;
+          }
+          const data = await invoke('narrationScript', { text: reportText, mode: editMode, targetSeconds: target });
+          setScript(data.script || '');
+          setScriptInfo(data);
+          flash('success', t('edit.scriptDone'));
+        });
+
+      const doSubtitles = () =>
+        run('subs', async () => {
+          const cues = Array.isArray(state.subtitles) ? state.subtitles : [];
+          if (cues.length === 0) {
+            flash('warn', t('edit.needSubs'));
+            return;
+          }
+          const data = await invoke('subtitles', {
+            cues: cues.map((cue) => ({ start: cue.start, end: cue.end, text: cue.text })),
+            preset,
+          });
+          setSubs(data);
+          flash('success', t('edit.subsDone'));
+        });
+
+      const editModes = options && Array.isArray(options.editModes) ? options.editModes : [];
+      const subtitlePresets = options && Array.isArray(options.subtitlePresets) ? options.subtitlePresets : [];
+      const targets = [60, 180, 300];
+
+      const body = h(
+        'div',
+        { className: 'fa-stack' },
+        h('div', { className: 'fa-hint' }, t('edit.voiceHint')),
+        h(
+          'div',
+          { className: 'fa-row' },
+          h('span', { className: 'fa-label' }, t('edit.scheme')),
+          h(FaButton, {
+            label: t('edit.schemeAuto'),
+            small: true,
+            variant: scheme === 'auto' ? 'primary' : 'ghost',
+            onClick: () => setScheme('auto'),
+          }),
+          h(FaButton, {
+            label: t('edit.schemeManual'),
+            small: true,
+            variant: scheme === 'manual' ? 'primary' : 'ghost',
+            onClick: () => setScheme('manual'),
+          }),
+        ),
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('edit.mode')),
+          editModes.map((item) =>
+            h(FaButton, {
+              key: item.id,
+              label: item.name,
+              small: true,
+              variant: editMode === item.id ? 'primary' : 'ghost',
+              onClick: () => setEditMode(item.id),
+            }),
+          ),
+        ),
+        scheme === 'auto'
+          ? h(
+              'div',
+              { className: 'fa-stack' },
+              h(
+                'div',
+                { className: 'fa-row fa-shot-options' },
+                h('span', { className: 'fa-label' }, t('edit.target')),
+                targets.map((seconds) =>
+                  h(FaButton, {
+                    key: seconds,
+                    label: `${seconds}s`,
+                    small: true,
+                    variant: target === seconds ? 'primary' : 'ghost',
+                    onClick: () => setTarget(seconds),
+                  }),
+                ),
+              ),
+              h(FaButton, {
+                label: busy.auto ? t('edit.generating') : t('edit.generate'),
+                variant: 'primary',
+                busy: Boolean(busy.auto),
+                disabled: Boolean(busy.auto),
+                onClick: () => void doAuto(),
+              }),
+            )
+          : h(
+              'div',
+              { className: 'fa-stack' },
+              h('div', { className: 'fa-hint' }, t('edit.manualHint')),
+              h('textarea', {
+                className: 'fa-textarea',
+                rows: 6,
+                value: clipsText,
+                placeholder: '0-20.5\n40-60',
+                onChange: (event) => setClipsText(event.target.value),
+              }),
+              h(FaButton, {
+                label: busy.manual ? t('edit.generating') : t('edit.render'),
+                variant: 'primary',
+                busy: Boolean(busy.manual),
+                disabled: Boolean(busy.manual),
+                onClick: () => void doManual(),
+              }),
+            ),
+        result && result.url
+          ? h(
+              'div',
+              { className: 'fa-row' },
+              h('span', { className: 'fa-label' }, t('edit.result')),
+              h('a', { className: 'fa-link', href: assetUrl(result.url), target: '_blank', rel: 'noopener' }, t('edit.open')),
+              h('span', { className: 'fa-hint' }, `${result.outputDuration || result.output_duration || 0}s`),
+            )
+          : null,
+        h(
+          'div',
+          { className: 'fa-row' },
+          h(FaButton, {
+            label: busy.script ? t('edit.generating') : t('edit.genScript'),
+            small: true,
+            busy: Boolean(busy.script),
+            disabled: Boolean(busy.script),
+            onClick: () => void doScript(),
+          }),
+          scriptInfo
+            ? h('span', { className: 'fa-hint' }, `${t('edit.chars')} ${scriptInfo.chars} · ${t('edit.estimate')} ${Math.round(scriptInfo.estimatedSeconds)}s`)
+            : null,
+        ),
+        script
+          ? h('textarea', {
+              className: 'fa-textarea',
+              rows: 8,
+              value: script,
+              onChange: (event) => setScript(event.target.value),
+            })
+          : null,
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('edit.preset')),
+          subtitlePresets.map((item) =>
+            h(FaButton, {
+              key: item.id,
+              label: item.name,
+              small: true,
+              variant: preset === item.id ? 'primary' : 'ghost',
+              onClick: () => setPreset(item.id),
+            }),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'fa-row' },
+          h(FaButton, {
+            label: busy.subs ? t('edit.generating') : t('edit.genSubs'),
+            small: true,
+            busy: Boolean(busy.subs),
+            disabled: Boolean(busy.subs),
+            onClick: () => void doSubtitles(),
+          }),
+          subs
+            ? h(
+                'span',
+                { className: 'fa-hint' },
+                h('a', { className: 'fa-link', href: assetUrl(subs.srtUrl), target: '_blank', rel: 'noopener' }, 'SRT'),
+                ' / ',
+                h('a', { className: 'fa-link', href: assetUrl(subs.assUrl), target: '_blank', rel: 'noopener' }, 'ASS'),
+              )
+            : null,
+        ),
+      );
+      return h(FaSection, { t, title: t('edit.title'), summary: t('edit.subtitle'), defaultOpen: false }, body);
+    }
+
     function AnalysisOptionsRow(props) {
       const t = props.t;
       const state = props.state;
@@ -5075,6 +5362,7 @@ window.__ModuleLoader__.load({
         h(ContextSection, { t, state }),
         h(AutoShotsSection, { t, state, inputActions: props.inputActions }),
         h(DeepSection, { t, state, openView: props.openView }),
+        h(EditVideoSection, { t, state }),
         h(MeasureSection, { t, state }),
         h(AnalysisFormSection, { t, state }),
         h(KnowledgeSection, { t, state }),
@@ -5354,6 +5642,33 @@ window.__ModuleLoader__.load({
       'deep.copyAll': '复制全文',
       'deep.startedAt': '开始时间',
       'deep.numericWarn': '数值校验警告',
+      'edit.title': '解说视频（Beta）',
+      'edit.subtitle': '剪辑成片 · 口播稿 · 字幕（配音待定）',
+      'edit.scheme': '剪辑方案',
+      'edit.schemeAuto': '一键成片',
+      'edit.schemeManual': '精细剪辑',
+      'edit.mode': '成片模式',
+      'edit.target': '目标时长',
+      'edit.generate': '生成粗剪',
+      'edit.generating': '生成中…',
+      'edit.manualHint': '手动片段格式：每行“开始-结束”（秒），例：0-20.5',
+      'edit.render': '渲染剪辑',
+      'edit.result': '成片',
+      'edit.open': '打开成片',
+      'edit.resultDone': '成片已生成',
+      'edit.needVideo': '请先导入视频。',
+      'edit.needShots': '请先检测镜头。',
+      'edit.needClips': '请填写有效片段（如 0-20.5）。',
+      'edit.genScript': '生成口播稿',
+      'edit.scriptDone': '口播稿已生成',
+      'edit.needAnalysis': '需要先生成深度拉片或整片报告。',
+      'edit.chars': '字数',
+      'edit.estimate': '预估',
+      'edit.preset': '字幕样式',
+      'edit.genSubs': '生成字幕',
+      'edit.subsDone': '字幕已生成',
+      'edit.needSubs': '请先导入或转写字幕。',
+      'edit.voiceHint': '配音引擎待定：当前仅生成剪辑与字幕，暂不合解说音轨。',
       'deep.resume': '继续任务',
       'deep.resumed': '任务已恢复',
       'deep.chart': '镜头时长曲线',
@@ -5734,6 +6049,33 @@ window.__ModuleLoader__.load({
       'deep.copyAll': 'Copy everything',
       'deep.startedAt': 'Started at',
       'deep.numericWarn': 'Numeric validation warning',
+      'edit.title': 'Narrated video (Beta)',
+      'edit.subtitle': 'Cut, script and subtitles (voice TBD)',
+      'edit.scheme': 'Editing scheme',
+      'edit.schemeAuto': 'One-click',
+      'edit.schemeManual': 'Manual',
+      'edit.mode': 'Output mode',
+      'edit.target': 'Target length',
+      'edit.generate': 'Generate rough cut',
+      'edit.generating': 'Generating…',
+      'edit.manualHint': 'Manual clips: one "start-end" per line (seconds), e.g. 0-20.5',
+      'edit.render': 'Render cut',
+      'edit.result': 'Output',
+      'edit.open': 'Open video',
+      'edit.resultDone': 'Video generated',
+      'edit.needVideo': 'Import a video first.',
+      'edit.needShots': 'Detect shots first.',
+      'edit.needClips': 'Enter valid clips (e.g. 0-20.5).',
+      'edit.genScript': 'Generate narration script',
+      'edit.scriptDone': 'Narration script generated',
+      'edit.needAnalysis': 'Generate a deep analysis or full report first.',
+      'edit.chars': 'Chars',
+      'edit.estimate': 'Est.',
+      'edit.preset': 'Subtitle style',
+      'edit.genSubs': 'Build subtitles',
+      'edit.subsDone': 'Subtitles generated',
+      'edit.needSubs': 'Import or transcribe subtitles first.',
+      'edit.voiceHint': 'Voice engine TBD: this version only renders cuts and subtitles.',
       'deep.resume': 'Resume job',
       'deep.resumed': 'Job resumed',
       'deep.chart': 'Shot-duration curve',
