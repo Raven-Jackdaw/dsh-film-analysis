@@ -3808,6 +3808,9 @@ window.__ModuleLoader__.load({
       const [scriptInfo, setScriptInfo] = useState(null);
       const [preset, setPreset] = useState('classic');
       const [subs, setSubs] = useState(null);
+      const [voiceStatus, setVoiceStatus] = useState(null);
+      const [voiceTier, setVoiceTier] = useState('standard');
+      const [narrated, setNarrated] = useState(null);
       const [busy, setBusy] = useState({});
       const shots = video && video.autoShots && Array.isArray(video.autoShots.shots) ? video.autoShots.shots : [];
 
@@ -3816,6 +3819,11 @@ window.__ModuleLoader__.load({
         invoke('editOptions', {})
           .then((data) => {
             if (alive && isRecord(data)) setOptions(data);
+          })
+          .catch(() => {});
+        invoke('voiceStatus', {})
+          .then((data) => {
+            if (alive && isRecord(data)) setVoiceStatus(data);
           })
           .catch(() => {});
         return () => {
@@ -3908,6 +3916,31 @@ window.__ModuleLoader__.load({
           });
           setSubs(data);
           flash('success', t('edit.subsDone'));
+        });
+
+      const doNarrate = () =>
+        run('narrate', async () => {
+          if (!video || !video.path) {
+            flash('warn', t('edit.needVideo'));
+            return;
+          }
+          const text = script || reportText;
+          if (!text) {
+            flash('warn', t('edit.needAnalysis'));
+            return;
+          }
+          const data = await invoke('narrateVideo', {
+            videoPath: video.path,
+            script: script || undefined,
+            text: script ? undefined : reportText,
+            mode: editMode,
+            editMode,
+            targetSeconds: target,
+            voiceTier,
+            preset,
+          });
+          setNarrated(data);
+          flash('success', t('edit.narratedDone'));
         });
 
       const editModes = options && Array.isArray(options.editModes) ? options.editModes : [];
@@ -4059,6 +4092,71 @@ window.__ModuleLoader__.load({
               )
             : null,
         ),
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('edit.voice')),
+          h(FaButton, {
+            label: t('edit.voiceStd'),
+            small: true,
+            variant: voiceTier === 'standard' ? 'primary' : 'ghost',
+            onClick: () => setVoiceTier('standard'),
+          }),
+          h(FaButton, {
+            label: busy.plus ? t('edit.plusDownloading') : t('edit.voicePlus'),
+            small: true,
+            variant: voiceTier === 'plus' ? 'primary' : 'ghost',
+            busy: Boolean(busy.plus),
+            disabled: Boolean(busy.plus),
+            onClick: () => {
+              const available = Boolean(voiceStatus && voiceStatus.plus && voiceStatus.plus.available);
+              if (available) {
+                setVoiceTier('plus');
+                return;
+              }
+              void run('plus', async () => {
+                const data = await invoke('downloadVoicepack', {});
+                if (!data || !data.installed) throw new Error(t('edit.plusDownloadFailed'));
+                setVoiceStatus((previous) => ({ ...(previous || {}), plus: { ...(previous?.plus || {}), available: true } }));
+                setVoiceTier('plus');
+                flash('success', t('edit.plusDownloaded'));
+              });
+            },
+          }),
+        ),
+        h(FaButton, {
+          label: busy.narrate ? t('edit.generating') : t('edit.genNarrated'),
+          variant: 'primary',
+          busy: Boolean(busy.narrate),
+          disabled: Boolean(busy.narrate),
+          onClick: () => void doNarrate(),
+        }),
+        narrated && narrated.url
+          ? h(
+              'div',
+              { className: 'fa-stack' },
+              h(
+                'div',
+                { className: 'fa-row' },
+                h('span', { className: 'fa-label' }, t('edit.narrated')),
+                h('a', { className: 'fa-link', href: assetUrl(narrated.url), target: '_blank', rel: 'noopener' }, t('edit.open')),
+                h('span', { className: 'fa-hint' }, `${narrated.outputDuration || 0}s`),
+              ),
+              h(
+                'div',
+                { className: 'fa-row' },
+                narrated.narration && narrated.narration.url
+                  ? h('a', { className: 'fa-link', href: assetUrl(narrated.narration.url), target: '_blank', rel: 'noopener' }, t('edit.openAudio'))
+                  : null,
+                narrated.subtitles && narrated.subtitles.srtUrl
+                  ? h('a', { className: 'fa-link', href: assetUrl(narrated.subtitles.srtUrl), target: '_blank', rel: 'noopener' }, 'SRT')
+                  : null,
+                narrated.subtitles && narrated.subtitles.assUrl
+                  ? h('a', { className: 'fa-link', href: assetUrl(narrated.subtitles.assUrl), target: '_blank', rel: 'noopener' }, 'ASS')
+                  : null,
+              ),
+            )
+          : null,
       );
       return h(FaSection, { t, title: t('edit.title'), summary: t('edit.subtitle'), defaultOpen: true }, body);
     }
@@ -5668,7 +5766,18 @@ window.__ModuleLoader__.load({
       'edit.genSubs': '生成字幕',
       'edit.subsDone': '字幕已生成',
       'edit.needSubs': '请先导入或转写字幕。',
-      'edit.voiceHint': '配音引擎待定：当前仅生成剪辑与字幕，暂不合解说音轨。',
+      'edit.voiceHint': '普通语音已内置（sherpa-onnx，随包离线）；Plus 语音包待发布。',
+      'edit.plusDownloading': 'Plus 语音包下载中…',
+      'edit.plusDownloaded': 'Plus 语音包已安装',
+      'edit.plusDownloadFailed': 'Plus 语音包下载失败：请稍后重试或检查网络。',
+      'edit.voice': '语音',
+      'edit.voiceStd': '普通语音（随包）',
+      'edit.voicePlus': 'Plus 语音（待发布）',
+      'edit.voiceUnavailable': 'Plus 语音包尚未发布，当前使用普通语音。',
+      'edit.genNarrated': '生成解说视频（含配音）',
+      'edit.narratedDone': '解说视频已生成',
+      'edit.narrated': '解说视频',
+      'edit.openAudio': '打开配音音轨',
       'deep.resume': '继续任务',
       'deep.resumed': '任务已恢复',
       'deep.chart': '镜头时长曲线',
@@ -6075,7 +6184,18 @@ window.__ModuleLoader__.load({
       'edit.genSubs': 'Build subtitles',
       'edit.subsDone': 'Subtitles generated',
       'edit.needSubs': 'Import or transcribe subtitles first.',
-      'edit.voiceHint': 'Voice engine TBD: this version only renders cuts and subtitles.',
+      'edit.voiceHint': 'Standard voice is bundled (sherpa-onnx, offline). Plus voice pack coming soon.',
+      'edit.plusDownloading': 'Downloading Plus voice pack…',
+      'edit.plusDownloaded': 'Plus voice pack installed',
+      'edit.plusDownloadFailed': 'Plus voice pack download failed. Please retry later.',
+      'edit.voice': 'Voice',
+      'edit.voiceStd': 'Standard (bundled)',
+      'edit.voicePlus': 'Plus voice (TBD)',
+      'edit.voiceUnavailable': 'Plus voice pack is not published yet; using standard voice.',
+      'edit.genNarrated': 'Generate narrated video',
+      'edit.narratedDone': 'Narrated video generated',
+      'edit.narrated': 'Narrated video',
+      'edit.openAudio': 'Open narration audio',
       'deep.resume': 'Resume job',
       'deep.resumed': 'Job resumed',
       'deep.chart': 'Shot-duration curve',

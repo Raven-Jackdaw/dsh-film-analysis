@@ -10,3 +10,4 @@ Thumbs.db
 .film-analysis/
 _work/
 *.tmp
+runtime/
