@@ -3802,7 +3802,7 @@ window.__ModuleLoader__.load({
       const shots = video && video.autoShots && Array.isArray(video.autoShots.shots) ? video.autoShots.shots : [];
       const [start, setStart] = useState(0);
       const [end, setEnd] = useState(20);
-      const [frameCount, setFrameCount] = useState(8);
+      const [sampleFps, setSampleFps] = useState(0.5);
       const [webQuery, setWebQuery] = useState('');
       const [webOn, setWebOn] = useState(false);
       const [busy, setBusy] = useState(false);
@@ -3825,7 +3825,7 @@ window.__ModuleLoader__.load({
         }
         const from = Math.max(0, Number(start) || 0);
         const to = Number(end);
-        if (!(to > from) || to - from > 120) {
+        if (!(to > from) || to - from > 180) {
           flash('warn', t('pseudo.invalid'));
           return;
         }
@@ -3835,7 +3835,7 @@ window.__ModuleLoader__.load({
             videoPath: video.path,
             start: from,
             end: to,
-            frameCount,
+            sampleFps,
             webQuery: webQuery.trim() || undefined,
             web: webOn,
           });
@@ -3872,16 +3872,31 @@ window.__ModuleLoader__.load({
             value: end,
             onChange: (event) => setEnd(Number(event.target.value) || 0),
           }),
-          h('span', { className: 'fa-label' }, t('pseudo.frames')),
-          [6, 8].map((count) =>
+          h('span', { className: 'fa-label' }, t('pseudo.fps')),
+          [
+            [0.25, t('pseudo.fps025')],
+            [0.5, t('pseudo.fps05')],
+            [1, t('pseudo.fps10')],
+          ].map(([value, label]) =>
             h(FaButton, {
-              key: count,
-              label: String(count),
+              key: value,
+              label,
               small: true,
-              variant: frameCount === count ? 'primary' : 'ghost',
-              onClick: () => setFrameCount(count),
+              variant: sampleFps === value ? 'primary' : 'ghost',
+              onClick: () => setSampleFps(value),
             }),
           ),
+        ),
+        h(
+          'div',
+          { className: 'fa-hint' },
+          `${t('pseudo.estimate')} ${(() => {
+            const span = Math.max(0, (Number(end) || 0) - (Number(start) || 0));
+            const estimatedFrames = Math.max(8, Math.round(span * sampleFps));
+            const batches = estimatedFrames <= 8 ? 1 : Math.ceil(estimatedFrames / 8);
+            const calls = batches <= 1 ? 1 : batches + 1;
+            return `${estimatedFrames} 帧 / ${batches} 窗口 / ${calls} 次调用`;
+          })()}；${t('pseudo.costWarn')}`,
         ),
         h(
           'div',
@@ -5956,6 +5971,12 @@ window.__ModuleLoader__.load({
       'pseudo.start': '开始',
       'pseudo.end': '结束',
       'pseudo.frames': '抽帧',
+      'pseudo.fps': '抽帧率',
+      'pseudo.fps025': '0.25 帧/秒（4 秒 1 帧）',
+      'pseudo.fps05': '0.5 帧/秒（2 秒 1 帧）',
+      'pseudo.fps10': '1 帧/秒（1 秒 1 帧）',
+      'pseudo.estimate': '预计',
+      'pseudo.costWarn': '帧数越多调用越多、费用随时长增加（无硬上限）',
       'pseudo.webQuery': '联网关键词',
       'pseudo.webPlaceholder': '影片名/导演/片名+年份',
       'pseudo.web': '联网增强',
@@ -5966,7 +5987,7 @@ window.__ModuleLoader__.load({
       'pseudo.quality': '质量',
       'pseudo.webCount': '网络资料',
       'pseudo.needVideo': '请先导入视频。',
-      'pseudo.invalid': '起止时间无效（需 end > start，且不超过 120 秒）。',
+      'pseudo.invalid': '起止时间无效（需 end > start，且不超过 180 秒）。',
       'edit.voiceSid': '音色编号',
       'edit.audition': '试听',
       'edit.voices': '可选音色',
@@ -6395,6 +6416,12 @@ window.__ModuleLoader__.load({
       'pseudo.start': 'Start',
       'pseudo.end': 'End',
       'pseudo.frames': 'Frames',
+      'pseudo.fps': 'Sampling rate',
+      'pseudo.fps025': '0.25 fps (4s/frame)',
+      'pseudo.fps05': '0.5 fps (2s/frame)',
+      'pseudo.fps10': '1 fps (1s/frame)',
+      'pseudo.estimate': 'Estimate',
+      'pseudo.costWarn': 'more frames = more calls and cost, no hard cap',
       'pseudo.webQuery': 'Web query',
       'pseudo.webPlaceholder': 'Film title / director / title + year',
       'pseudo.web': 'Web',
@@ -6405,7 +6432,7 @@ window.__ModuleLoader__.load({
       'pseudo.quality': 'Quality',
       'pseudo.webCount': 'Web sources',
       'pseudo.needVideo': 'Import a video first.',
-      'pseudo.invalid': 'Invalid range (end > start, ≤120 seconds).',
+      'pseudo.invalid': 'Invalid range (end > start, ≤180 seconds).',
       'edit.voiceSid': 'Voice ID',
       'edit.audition': 'Audition',
       'edit.voices': 'Voices',
