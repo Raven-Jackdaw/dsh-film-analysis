@@ -3804,7 +3804,7 @@ window.__ModuleLoader__.load({
       const [end, setEnd] = useState(20);
       const [frameCount, setFrameCount] = useState(8);
       const [webQuery, setWebQuery] = useState('');
-      const [webOn, setWebOn] = useState(true);
+      const [webOn, setWebOn] = useState(false);
       const [busy, setBusy] = useState(false);
       const [result, setResult] = useState(null);
 
@@ -5950,7 +5950,7 @@ window.__ModuleLoader__.load({
       'edit.voiceHint': '普通语音已内置（sherpa-onnx，随包离线）；Plus 语音包待发布。',
       'pseudo.title': '伪片段分析（实验）',
       'pseudo.subtitle': '多帧时序 + 片段测量 + 联网增强',
-      'pseudo.hint': '对一段不超过 120 秒的片段按时间顺序抽多帧，结合运动/亮度/声音测量推断镜头内运动与剪辑；可联网补充影片背景。',
+      'pseudo.hint': '对一段不超过 120 秒的片段按时间顺序抽多帧，结合运动/亮度/声音测量推断镜头内运动与剪辑；默认不联网，填片名后手动开启。',
       'pseudo.start': '开始',
       'pseudo.end': '结束',
       'pseudo.frames': '抽帧',
@@ -6388,7 +6388,7 @@ window.__ModuleLoader__.load({
       'edit.voiceHint': 'Standard voice is bundled (sherpa-onnx, offline). Plus voice pack coming soon.',
       'pseudo.title': 'Pseudo-clip analysis (experimental)',
       'pseudo.subtitle': 'Multi-frame + clip metrics + web context',
-      'pseudo.hint': 'Sample up to 8 ordered frames from a clip (≤120s), infer motion and editing from frames plus motion/brightness/audio metrics; optionally add web context.',
+      'pseudo.hint': 'Sample up to 8 ordered frames from a clip (≤120s) and infer motion/editing from frames plus motion/brightness/audio metrics. Web is off by default; enter a title and enable it manually.',
       'pseudo.start': 'Start',
       'pseudo.end': 'End',
       'pseudo.frames': 'Frames',
