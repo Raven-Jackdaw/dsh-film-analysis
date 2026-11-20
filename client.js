@@ -3795,7 +3795,7 @@ window.__ModuleLoader__.load({
         .filter(Boolean);
     }
 
-    function PseudoClipSection(props) {
+    function ClipAnalysisSection(props) {
       const t = props.t;
       const state = props.state;
       const video = state.video;
@@ -3831,7 +3831,7 @@ window.__ModuleLoader__.load({
         }
         setBusy(true);
         try {
-          const data = await invoke('pseudoClipAnalyze', {
+          const data = await invoke('clipAnalyzeNormal', {
             videoPath: video.path,
             start: from,
             end: to,
@@ -3852,6 +3852,7 @@ window.__ModuleLoader__.load({
         FaSection,
         { t, title: t('pseudo.title'), summary: t('pseudo.subtitle'), defaultOpen: false },
         h('div', { className: 'fa-hint' }, t('pseudo.hint')),
+        h('div', { className: 'fa-hint' }, t('pseudo.version')),
         h(
           'div',
           { className: 'fa-row fa-shot-options' },
@@ -5639,7 +5640,7 @@ window.__ModuleLoader__.load({
         h(ImportSection, { t, state }),
         h(ContextSection, { t, state }),
         h(AutoShotsSection, { t, state, inputActions: props.inputActions }),
-        h(PseudoClipSection, { t, state }),
+        h(ClipAnalysisSection, { t, state }),
         h(EditVideoSection, { t, state }),
         h(DeepSection, { t, state, openView: props.openView }),
         h(MeasureSection, { t, state }),
@@ -5948,18 +5949,19 @@ window.__ModuleLoader__.load({
       'edit.subsDone': '字幕已生成',
       'edit.needSubs': '请先导入或转写字幕。',
       'edit.voiceHint': '普通语音已内置（sherpa-onnx，随包离线）；Plus 语音包待发布。',
-      'pseudo.title': '伪片段分析（实验）',
-      'pseudo.subtitle': '多帧时序 + 片段测量 + 联网增强',
+      'pseudo.title': '片段分析（普通版）',
+      'pseudo.subtitle': '多帧近似片段分析 · 联网可选',
       'pseudo.hint': '对一段不超过 120 秒的片段按时间顺序抽多帧，结合运动/亮度/声音测量推断镜头内运动与剪辑；默认不联网，填片名后手动开启。',
+      'pseudo.version': '版本：普通版（多帧近似）；接入可读视频的模型后升级为「片段分析 Max」（直接读视频）。',
       'pseudo.start': '开始',
       'pseudo.end': '结束',
       'pseudo.frames': '抽帧',
       'pseudo.webQuery': '联网关键词',
       'pseudo.webPlaceholder': '影片名/导演/片名+年份',
       'pseudo.web': '联网增强',
-      'pseudo.analyze': '开始伪片段分析',
+      'pseudo.analyze': '开始片段分析',
       'pseudo.analyzing': '分析中…',
-      'pseudo.done': '伪片段分析完成',
+      'pseudo.done': '片段分析完成',
       'pseudo.result': '结果',
       'pseudo.quality': '质量',
       'pseudo.webCount': '网络资料',
@@ -6386,9 +6388,10 @@ window.__ModuleLoader__.load({
       'edit.subsDone': 'Subtitles generated',
       'edit.needSubs': 'Import or transcribe subtitles first.',
       'edit.voiceHint': 'Standard voice is bundled (sherpa-onnx, offline). Plus voice pack coming soon.',
-      'pseudo.title': 'Pseudo-clip analysis (experimental)',
-      'pseudo.subtitle': 'Multi-frame + clip metrics + web context',
+      'pseudo.title': 'Clip analysis (normal)',
+      'pseudo.subtitle': 'Multi-frame approximation · web optional',
       'pseudo.hint': 'Sample up to 8 ordered frames from a clip (≤120s) and infer motion/editing from frames plus motion/brightness/audio metrics. Web is off by default; enter a title and enable it manually.',
+      'pseudo.version': 'Version: normal (multi-frame approximation). A video-capable model will upgrade this entry to “Clip analysis Max” (native video).',
       'pseudo.start': 'Start',
       'pseudo.end': 'End',
       'pseudo.frames': 'Frames',
@@ -6397,7 +6400,7 @@ window.__ModuleLoader__.load({
       'pseudo.web': 'Web',
       'pseudo.analyze': 'Analyze clip',
       'pseudo.analyzing': 'Analyzing…',
-      'pseudo.done': 'Pseudo-clip analysis completed',
+      'pseudo.done': 'Clip analysis completed',
       'pseudo.result': 'Result',
       'pseudo.quality': 'Quality',
       'pseudo.webCount': 'Web sources',
