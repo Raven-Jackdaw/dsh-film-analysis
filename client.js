@@ -3795,6 +3795,140 @@ window.__ModuleLoader__.load({
         .filter(Boolean);
     }
 
+    function PseudoClipSection(props) {
+      const t = props.t;
+      const state = props.state;
+      const video = state.video;
+      const shots = video && video.autoShots && Array.isArray(video.autoShots.shots) ? video.autoShots.shots : [];
+      const [start, setStart] = useState(0);
+      const [end, setEnd] = useState(20);
+      const [frameCount, setFrameCount] = useState(8);
+      const [webQuery, setWebQuery] = useState('');
+      const [webOn, setWebOn] = useState(true);
+      const [busy, setBusy] = useState(false);
+      const [result, setResult] = useState(null);
+
+      useEffect(() => {
+        if (shots.length > 0 && start === 0 && end === 20) {
+          const first = shots[0];
+          const from = Number(first.start) || 0;
+          setStart(from);
+          setEnd(Math.min(Number(first.end) || from + 20, from + 120));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [shots.length]);
+
+      const analyze = async () => {
+        if (!video || !video.path) {
+          flash('warn', t('pseudo.needVideo'));
+          return;
+        }
+        const from = Math.max(0, Number(start) || 0);
+        const to = Number(end);
+        if (!(to > from) || to - from > 120) {
+          flash('warn', t('pseudo.invalid'));
+          return;
+        }
+        setBusy(true);
+        try {
+          const data = await invoke('pseudoClipAnalyze', {
+            videoPath: video.path,
+            start: from,
+            end: to,
+            frameCount,
+            webQuery: webQuery.trim() || undefined,
+            web: webOn,
+          });
+          setResult(data);
+          flash('success', t('pseudo.done'));
+        } catch (error) {
+          flash('error', errorText(error));
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      return h(
+        FaSection,
+        { t, title: t('pseudo.title'), summary: t('pseudo.subtitle'), defaultOpen: false },
+        h('div', { className: 'fa-hint' }, t('pseudo.hint')),
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('pseudo.start')),
+          h('input', {
+            className: 'fa-input',
+            type: 'number',
+            step: '0.1',
+            value: start,
+            onChange: (event) => setStart(Number(event.target.value) || 0),
+          }),
+          h('span', { className: 'fa-label' }, t('pseudo.end')),
+          h('input', {
+            className: 'fa-input',
+            type: 'number',
+            step: '0.1',
+            value: end,
+            onChange: (event) => setEnd(Number(event.target.value) || 0),
+          }),
+          h('span', { className: 'fa-label' }, t('pseudo.frames')),
+          [6, 8].map((count) =>
+            h(FaButton, {
+              key: count,
+              label: String(count),
+              small: true,
+              variant: frameCount === count ? 'primary' : 'ghost',
+              onClick: () => setFrameCount(count),
+            }),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'fa-row fa-shot-options' },
+          h('span', { className: 'fa-label' }, t('pseudo.webQuery')),
+          h('input', {
+            className: 'fa-input',
+            style: { width: '220px' },
+            type: 'text',
+            value: webQuery,
+            placeholder: t('pseudo.webPlaceholder'),
+            onChange: (event) => setWebQuery(event.target.value),
+          }),
+          h(FaButton, {
+            label: t('pseudo.web'),
+            small: true,
+            variant: webOn ? 'primary' : 'ghost',
+            onClick: () => setWebOn((previous) => !previous),
+          }),
+          h(FaButton, {
+            label: busy ? t('pseudo.analyzing') : t('pseudo.analyze'),
+            variant: 'primary',
+            busy,
+            disabled: busy,
+            onClick: () => void analyze(),
+          }),
+        ),
+        result
+          ? h(
+              'div',
+              { className: 'fa-stack' },
+              h(
+                'div',
+                { className: 'fa-row' },
+                h('span', { className: 'fa-label' }, t('pseudo.result')),
+                result.quality
+                  ? h('span', { className: 'fa-hint' }, `${t('pseudo.quality')} ${result.quality.grade} · ${result.quality.score}`)
+                  : null,
+                result.web
+                  ? h('span', { className: 'fa-hint' }, `${t('pseudo.webCount')} ${Array.isArray(result.web.snippets) ? result.web.snippets.length : 0}`)
+                  : null,
+              ),
+              h(FaMarkdown, { text: result.text || result.markdown || '' }),
+            )
+          : null,
+      );
+    }
+
     function EditVideoSection(props) {
       const t = props.t;
       const state = props.state;
@@ -5505,6 +5639,7 @@ window.__ModuleLoader__.load({
         h(ImportSection, { t, state }),
         h(ContextSection, { t, state }),
         h(AutoShotsSection, { t, state, inputActions: props.inputActions }),
+        h(PseudoClipSection, { t, state }),
         h(EditVideoSection, { t, state }),
         h(DeepSection, { t, state, openView: props.openView }),
         h(MeasureSection, { t, state }),
@@ -5813,6 +5948,23 @@ window.__ModuleLoader__.load({
       'edit.subsDone': '字幕已生成',
       'edit.needSubs': '请先导入或转写字幕。',
       'edit.voiceHint': '普通语音已内置（sherpa-onnx，随包离线）；Plus 语音包待发布。',
+      'pseudo.title': '伪片段分析（实验）',
+      'pseudo.subtitle': '多帧时序 + 片段测量 + 联网增强',
+      'pseudo.hint': '对一段不超过 120 秒的片段按时间顺序抽多帧，结合运动/亮度/声音测量推断镜头内运动与剪辑；可联网补充影片背景。',
+      'pseudo.start': '开始',
+      'pseudo.end': '结束',
+      'pseudo.frames': '抽帧',
+      'pseudo.webQuery': '联网关键词',
+      'pseudo.webPlaceholder': '影片名/导演/片名+年份',
+      'pseudo.web': '联网增强',
+      'pseudo.analyze': '开始伪片段分析',
+      'pseudo.analyzing': '分析中…',
+      'pseudo.done': '伪片段分析完成',
+      'pseudo.result': '结果',
+      'pseudo.quality': '质量',
+      'pseudo.webCount': '网络资料',
+      'pseudo.needVideo': '请先导入视频。',
+      'pseudo.invalid': '起止时间无效（需 end > start，且不超过 120 秒）。',
       'edit.voiceSid': '音色编号',
       'edit.audition': '试听',
       'edit.voices': '可选音色',
@@ -6234,6 +6386,23 @@ window.__ModuleLoader__.load({
       'edit.subsDone': 'Subtitles generated',
       'edit.needSubs': 'Import or transcribe subtitles first.',
       'edit.voiceHint': 'Standard voice is bundled (sherpa-onnx, offline). Plus voice pack coming soon.',
+      'pseudo.title': 'Pseudo-clip analysis (experimental)',
+      'pseudo.subtitle': 'Multi-frame + clip metrics + web context',
+      'pseudo.hint': 'Sample up to 8 ordered frames from a clip (≤120s), infer motion and editing from frames plus motion/brightness/audio metrics; optionally add web context.',
+      'pseudo.start': 'Start',
+      'pseudo.end': 'End',
+      'pseudo.frames': 'Frames',
+      'pseudo.webQuery': 'Web query',
+      'pseudo.webPlaceholder': 'Film title / director / title + year',
+      'pseudo.web': 'Web',
+      'pseudo.analyze': 'Analyze clip',
+      'pseudo.analyzing': 'Analyzing…',
+      'pseudo.done': 'Pseudo-clip analysis completed',
+      'pseudo.result': 'Result',
+      'pseudo.quality': 'Quality',
+      'pseudo.webCount': 'Web sources',
+      'pseudo.needVideo': 'Import a video first.',
+      'pseudo.invalid': 'Invalid range (end > start, ≤120 seconds).',
       'edit.voiceSid': 'Voice ID',
       'edit.audition': 'Audition',
       'edit.voices': 'Voices',

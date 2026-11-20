@@ -5,7 +5,7 @@ import { createToolDefinitions } from './lib/tools.js';
 import { registerRoutes } from './lib/routes.js';
 import { disposeOcr } from './lib/ocr.js';
 
-export const inject = ['tools', 'webServer'];
+export const inject = ['tools', 'webServer', 'web'];
 
 export function apply(ctx, config) {
   const resolvedConfig = config && typeof config === 'object' ? config : {};
